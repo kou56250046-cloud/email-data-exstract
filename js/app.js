@@ -11,7 +11,7 @@
   const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
 
   const Msg = window.MsgParser, Cls = window.MsgClassify, Store = window.MsgStore, Exp = window.MsgExport, Xlsx = window.MsgXlsx;
-  const Fields = window.MsgFields, Sum = window.MsgSummary;
+  const Fields = window.MsgFields, Sum = window.MsgSummary, Rep = window.MsgReport;
   const NONE = Sum.NONE;
   const $ = (id) => document.getElementById(id);
   const PAGE = 100;
@@ -25,6 +25,9 @@
     mode: 'list',             // 'list' | 'summary'
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
+    sumMatrixMode: 'count',   // 'count' | 'all' | 'row'
+    alloc: { layer: 'main', n: 200, method: 'min', minK: 5, incNone: false }, // 評価データの配分試算
+    reportWithMails: false,   // 集計の HTML にメール一覧を付けるか
     sort: { key: 'date', dir: -1 },
     page: 0,
     selected: new Set(),
@@ -422,6 +425,7 @@
   // ---------- 描画 ----------
 
   function render() {
+    if (state.loading) return;
     computeView();
     renderCats();
     renderFilterOptions();
@@ -1002,10 +1006,8 @@
   }
   const mainKeyToFilter = (id) => (id === NONE ? 'none' : id);
 
-  function heat(n, max) {
-    if (!n || !max) return '';
-    return `background: color-mix(in srgb, var(--accent) ${Math.round(8 + (n / max) * 62)}%, white);` + (n / max > 0.55 ? 'color:#fff;' : '');
-  }
+  // 濃淡は保存 HTML と同じ計算（背景の明るさから文字色を決める）
+  const heat = (v, max) => Rep.heatStyle(v, max);
   function bar(n, max) {
     return el('div', { class: 'bar' }, el('span', { style: `width:${max ? Math.max(2, Math.round((n / max) * 100)) : 0}%` }));
   }
@@ -1013,51 +1015,308 @@
     return el('button', { class: 'btn small', type: 'button', onclick: () => download(`${fileBase}-${stamp()}.csv`, Sum.tableToCsv(tableFn()), 'text/csv;charset=utf-8') }, label);
   }
 
-  function renderSummary() {
-    const box = $('summary');
-    clear(box);
+  const ALLOC_LAYERS = { main: '主カテゴリ', sub: '副カテゴリ', cross: '主 × 副' };
+  const ALLOC_METHODS = { prop: '比例配分', equal: '均等', min: '比例＋最低件数' };
+  const ALLOC_HELP = {
+    prop: '母集団の割合どおりに配ります。多い分類ほど多く集めます。少ない分類は 0 件になることがあります。',
+    equal: '各層から同じ件数を集めます。少ない分類も同じ重みで評価できますが、母数が足りない層が出やすくなります。',
+    min: '各層にまず最低件数を確保し、残りを母集団の割合どおりに配ります。少ない分類も評価に入れたいときに向きます。'
+  };
+  const ALLOC_ROUND = '端数は、切り捨てで余った分を小数部分の大きい層から 1 件ずつ足して、合計を総件数に合わせています。';
+  const MATRIX_MODES = { count: '件数', all: '全体に占める割合', row: '主カテゴリの中の割合' };
+  const SMALL_STRATUM = 5;      // 「母数が少ない層」とみなす件数（要点の数字）
+  const NONE_WARN = 0.1;        // 未分類がこの割合を超えたら試算に注意を出す
+
+  function catColor(id, a, i) {
+    if (id === NONE) return Rep.NONE_COLOR;
+    const c = catById(id, a);
+    return Rep.color(i, c && c.color);
+  }
+
+  /** 評価データの配分の層。母数 0 の層は除く。未分類は既定で除く（分類されていないメールから集める計画にしない） */
+  function allocStrata(mx, layer, incNone) {
+    const L = layer || state.alloc.layer, inc = incNone == null ? state.alloc.incNone : incNone;
+    const all = [];
+    if (L === 'main') mx.rows.forEach((r) => all.push({ key: r, none: r === NONE, name: keyName(r, 'main'), count: mx.rowTotal[r] }));
+    else if (L === 'sub') mx.cols.forEach((c) => all.push({ key: c, none: c === NONE, name: keyName(c, 'sub'), count: mx.colTotal[c] }));
+    else for (const r of mx.rows) for (const c of mx.cols) all.push({ key: r + '|' + c, none: r === NONE || c === NONE, name: `${keyName(r, 'main')} × ${keyName(c, 'sub')}`, count: mx.cells[r][c] });
+    const live = all.filter((s) => s.count > 0);
+    const noneN = live.filter((s) => s.none).reduce((a, s) => a + s.count, 0);
+    return { strata: inc ? live : live.filter((s) => !s.none), noneN };
+  }
+
+  /** 配分の計算と、画面・CSV・保存 HTML に共通の注記 */
+  function allocCompute(d) {
+    const { strata, noneN } = allocStrata(d.mx);
+    const al = Sum.allocate(strata, state.alloc.n, state.alloc.method, state.alloc.minK);
+    al.rows.forEach((r, i) => { r.name = strata[i].name; });
+    const pre = [];
+    const L = state.alloc.layer;
+    const noneShare = Math.max(L !== 'sub' ? shareOf(d.shMain, NONE) : 0, L !== 'main' ? shareOf(d.shSub, NONE) : 0);
+    if (noneN && !state.alloc.incNone) pre.push(`未分類を含む ${noneN} 件は層から外しています（母数の合計は ${al.population} 件）。`);
+    if (noneN && state.alloc.incNone) pre.push('未分類も 1 つの層として配っています。');
+    if (noneShare > NONE_WARN) pre.push(`未分類が ${Rep.pct(noneShare)} あります。先に分類を直すと、試算が実態に近くなります。`);
+    al.notes = pre.concat(al.notes);
+    return al;
+  }
+
+  /** 集計に使う値を 1 か所で作る（画面・CSV・保存 HTML で同じ数字にするため） */
+  function summaryData() {
     const rows = summaryRows();
     const mainCats = axis('main').categories.filter((c) => state.sumIncExcluded || !c.exclude);
     const subCats = axis('sub').categories;
+    const mx = Sum.matrix(rows, mainCats, subCats);
+    const d = { rows, mainCats, subCats, mx, shMain: Sum.shares(rows, mainCats, 'main'), shSub: Sum.shares(rows, subCats, 'sub'),
+      mo: Sum.monthly(rows, mainCats), ss: Sum.bySs(rows, mainCats) };
+    d.al = allocCompute(d);
+    return d;
+  }
+
+  const shareOf = (sh, key) => { const r = sh.rows.find((x) => x.key === key); return r ? r.share : 0; };
+  /** 要点の数字。配分を決める材料（最大の分類・母数の少ない層）を先に、データの質を後に */
+  function kpis(d) {
+    const noSs = d.rows.filter((m) => !(m.ss && m.ss.name)).length;
+    const top = d.shMain.rows.filter((r) => r.key !== NONE).sort((a, b) => b.count - a.count)[0];
+    const { strata } = allocStrata(d.mx, 'cross', false); // 試算の設定に連動させない（試算は部分更新のため）
+    const small = strata.filter((s) => s.count < SMALL_STRATUM).length;
+    return [
+      { label: '集計したメール', value: d.rows.length + ' 件' },
+      { label: top ? `最も多い主カテゴリ（${keyName(top.key, 'main')}）` : '最も多い主カテゴリ', value: top ? Rep.pct(top.share) : '—' },
+      { label: `母数 ${SMALL_STRATUM} 件未満の組み合わせ（主 × 副、未分類を除く）`, value: `${small} / ${strata.length}` },
+      { label: '未分類（主 / 副）', value: `${Rep.pct(shareOf(d.shMain, NONE))} / ${Rep.pct(shareOf(d.shSub, NONE))}` },
+      { label: 'SS 名が取れない', value: Rep.pct(d.rows.length ? noSs / d.rows.length : 0) }
+    ];
+  }
+
+  /** 絞り込みの内容（無ければ空） */
+  function filterParts() {
+    const f = state.filter, out = [];
+    if (f.cat === 'none') out.push('主カテゴリ: 未分類');
+    else if (f.cat !== 'all' && f.cat !== 'error') out.push('主カテゴリ: ' + keyName(f.cat, 'main'));
+    if (f.sub) out.push('副カテゴリ: ' + keyName(f.sub, 'sub'));
+    if (f.ss) out.push('SS: ' + f.ss);
+    if (f.q) out.push('検索語: ' + f.q);
+    if (f.from) out.push('送信者: ' + f.from);
+    if (f.dateFrom || f.dateTo) out.push('期間: ' + (f.dateFrom || '（指定なし）') + ' 〜 ' + (f.dateTo || '（指定なし）'));
+    if (f.att) out.push($('attQ').selectedOptions[0].textContent);
+    if (f.dup === 'only') out.push('重複しているものだけ');
+    return out;
+  }
+  /** 今の集計の条件を文にする（保存 HTML の冒頭に出す） */
+  function filterLabel() {
+    const parts = filterParts();
+    const out = parts.length ? parts : ['絞り込みなし（読み込んだメールすべて）'];
+    out.push(state.sumIncExcluded ? '「書き出しから外す」カテゴリも含める' : '「書き出しから外す」カテゴリ（対象外）は除く');
+    out.push('読めなかったファイルは除き、同じメールが複数のファイルにあるときは 1 件として数える');
+    return out;
+  }
+  /** 試算の対象を 1 行で（画面と CSV） */
+  function targetLabel(d) {
+    const parts = filterParts();
+    return `対象: ${d.rows.length} 件（${parts.length ? '絞り込み中 ― ' + parts.join(' / ') : '絞り込みなし'}）`;
+  }
+
+  const shareList = (sh, a) => sh.rows.map((r, i) => ({ key: r.key, name: keyName(r.key, a), count: r.count, share: r.share, color: catColor(r.key, a, i) }));
+  const mxView = (mx) => ({
+    rowNames: mx.rows.map((r) => keyName(r, 'main')), colNames: mx.cols.map((c) => keyName(c, 'sub')),
+    cells: mx.rows.map((r) => mx.cols.map((c) => mx.cells[r][c])),
+    rowTotal: mx.rows.map((r) => mx.rowTotal[r]), colTotal: mx.cols.map((c) => mx.colTotal[c]), total: mx.total
+  });
+  const monthLabel = (k) => (/^\d{4}-\d{2}$/.test(k) ? k.replace('-', '年') + '月' : k);
+  function monthlyChart(d) {
+    const series = d.mo.cols.map((c, i) => ({ label: keyName(c, 'main'), color: catColor(c, 'main', i) }));
+    const bars = d.mo.rows.filter((r) => /^\d{4}-\d{2}$/.test(r.month)).map((r) => ({ label: r.month.replace('-', '/'), values: d.mo.cols.map((c) => r.counts[c]) }));
+    const noDate = d.mo.rows.find((r) => !/^\d{4}-\d{2}$/.test(r.month));
+    const note = noDate && noDate.total ? `日付の無い ${noDate.total} 件はグラフに含めていません（表には含みます）` : '';
+    return { series, bars, note };
+  }
+  function allocTitle() {
+    const a = state.alloc;
+    return `何で分けるか: ${ALLOC_LAYERS[a.layer]} / 集めたい総件数: ${a.n} 件 / 方式: ${ALLOC_METHODS[a.method]}` + (a.method === 'min' ? `（各層の最低 ${a.minK} 件）` : '') +
+      (a.incNone ? ' / 未分類も層に含める' : '');
+  }
+
+  function reportHtml(d, withMails) {
+    const mc = monthlyChart(d);
+    const data = {
+      title: '集計レポート', createdAt: Exp.fmtDate(new Date().toISOString()), conditions: filterLabel(), total: d.rows.length, kpis: kpis(d),
+      main: { list: shareList(d.shMain, 'main'), total: d.shMain.total },
+      sub: { list: shareList(d.shSub, 'sub'), total: d.shSub.total },
+      matrix: mxView(d.mx),
+      alloc: { title: '評価データの配分試算', note: `${targetLabel(d)}。${allocTitle()}。${ALLOC_HELP[state.alloc.method]}${ALLOC_ROUND}`, result: d.al },
+      monthly: { series: mc.series, bars: mc.bars, note: mc.note, cols: d.mo.cols.map((c) => keyName(c, 'main')),
+        rows: d.mo.rows.map((r) => ({ name: monthLabel(r.month), counts: d.mo.cols.map((c) => r.counts[c]), total: r.total })) },
+      ss: { cols: d.ss.cols.map((c) => keyName(c, 'main')), rows: d.ss.rows.map((r) => ({ name: r.ss, counts: d.ss.cols.map((c) => r.counts[c]), total: r.total })) }
+    };
+    const mails = withMails ? { css: Exp.LIST_CSS_SCOPED, body: Exp.listBody(d.rows, EXPORT_INFO, axis('main').categories.map((c) => c.name).concat('未分類')) } : null;
+    return Rep.toHtml(data, { mails });
+  }
+
+  /** SVG・表の文字列を差し込む。中の文字は Rep 側で escape 済み */
+  function svgBox(svg, cls) {
+    const box = el('div', { class: cls || 'sum-chart' });
+    box.innerHTML = svg;
+    return box;
+  }
+
+  /** 割合の表（名前クリックで一覧へ）＋横棒 */
+  function sharesSection(id, title, sh, a, drillKey, csvName) {
+    const list = shareList(sh, a);
+    const t = el('table', { class: 'sum-table shares' });
+    t.appendChild(el('thead', null, el('tr', null, [el('th', { text: '分類' }), el('th', { text: '件数' }), el('th', { text: '割合' })])));
+    const tb = el('tbody');
+    for (const r of list) {
+      const key = a === 'main' ? mainKeyToFilter(r.key) : r.key;
+      tb.appendChild(el('tr', null, [
+        el('th', { class: 'rowh' }, r.count ? el('button', { type: 'button', class: 'link', onclick: () => drill({ [drillKey]: key }) }, r.name) : r.name),
+        el('td', { class: 'num', text: String(r.count) }),
+        el('td', { class: 'num', text: Rep.pct(r.share) })
+      ]));
+    }
+    tb.appendChild(el('tr', { class: 'foot' }, [el('th', { text: '合計' }), el('td', { class: 'num tot', text: String(sh.total) }), el('td', { class: 'num tot', text: '100.0%' })]));
+    t.appendChild(tb);
+    const chart = svgBox(Rep.hbars(list.map((r) => ({ label: r.name, value: r.share, text: `${Rep.pct(r.share)}（${r.count}）`, color: r.color })), { width: 560, title }));
+    chart.setAttribute('aria-hidden', 'true'); // 同じ内容は左の表にある
+    const csv = () => [['分類', '件数', '割合(%)'], ...list.map((r) => [r.name, r.count, (r.share * 100).toFixed(1)]), ['合計', sh.total, '100.0']];
+    const s = section(title, `${sh.total} 件のうちの割合。分類名をクリックすると、その一覧へ移ります。棒の長さは最も多い分類を基準にしています。`, el('div', { class: 'sum-cols' }, [t, chart]), csvButton('CSV で書き出す', csvName, csv));
+    s.id = id;
+    return s;
+  }
+
+  /** 評価データの配分試算の節。入力欄はそのまま残し、結果の部分だけを描き直す（入力中のフォーカスを保つ） */
+  function allocSection(d) {
+    const a = state.alloc;
+    const result = el('div', { class: 'sum-alloc-result' });
+    const help = el('p', { class: 'note' });
+    const target = el('p', { class: 'sum-target' });
+    let cur = d;
+    const refresh = () => {
+      cur = Object.assign({}, cur);
+      cur.al = allocCompute(cur);
+      help.textContent = ALLOC_HELP[a.method] + ALLOC_ROUND;
+      minIn.disabled = a.method !== 'min';
+      clear(result);
+      for (const n of cur.al.notes) result.appendChild(el('p', { class: 'warn-note', text: n }));
+      const box = svgBox(Rep.allocTable(cur.al), 'sum-wrap');
+      box.setAttribute('tabindex', '0'); box.setAttribute('role', 'region'); box.setAttribute('aria-label', '配分試算の表');
+      result.appendChild(box);
+    };
+    const num = (k) => (ev) => { state.alloc[k] = Math.max(0, Math.floor(+ev.target.value || 0)); refresh(); };
+    const pick = (k) => (ev) => { state.alloc[k] = ev.target.value; refresh(); };
+    const minIn = el('input', { type: 'number', min: '0', step: '1', value: String(a.minK), class: 'num-in', oninput: num('minK') });
+    const form = el('fieldset', { class: 'sum-alloc-form' }, [
+      el('legend', { text: '試算の条件' }),
+      el('label', null, ['何で分けるか ', el('select', { onchange: pick('layer') }, Object.keys(ALLOC_LAYERS).map((k) => el('option', { value: k, text: ALLOC_LAYERS[k], selected: a.layer === k })))]),
+      el('label', null, ['集めたい総件数 ', el('input', { type: 'number', min: '0', step: '1', value: String(a.n), class: 'num-in', oninput: num('n') }), ' 件']),
+      el('label', null, ['方式 ', el('select', { onchange: pick('method') }, Object.keys(ALLOC_METHODS).map((k) => el('option', { value: k, text: ALLOC_METHODS[k], selected: a.method === k })))]),
+      el('label', null, ['各層の最低 ', minIn, ' 件']),
+      el('label', null, [el('input', { type: 'checkbox', checked: a.incNone, onchange: (ev) => { state.alloc.incNone = ev.target.checked; refresh(); } }), '未分類も層に含める'])
+    ]);
+    const parts = filterParts();
+    target.textContent = targetLabel(d);
+    target.classList.toggle('filtered', parts.length > 0);
+    const allocCsv = () => {
+      const al = cur.al;
+      return [[targetLabel(cur)], [allocTitle()], ...al.notes.map((n) => ['注意: ' + n]), [],
+        ['層', '母数', '母集団の割合(%)', '配分件数', '配分の割合(%)', '不足（母数が足りず集められない件数）'],
+        ...al.rows.map((r) => [r.name, r.count, (r.share * 100).toFixed(1), r.alloc, (r.allocShare * 100).toFixed(1), r.short || '']),
+        ['合計', al.population, al.population ? '100.0' : '', al.n, al.n ? '100.0' : '', al.rows.reduce((s, r) => s + r.short, 0) || '']];
+    };
+    const sec = el('section', { class: 'sum-sec', id: 'sum-alloc' }, [
+      el('div', { class: 'sum-sec-head' }, [el('h3', { text: '評価データの配分試算' }), csvButton('CSV で書き出す', '集計_配分試算', allocCsv)]),
+      target,
+      el('p', { class: 'note', text: 'どの分類から何件ずつ評価データを集めるかの目安です。条件を変えると、すぐに表が変わります。' }),
+      form, help, result
+    ]);
+    refresh();
+    return sec;
+  }
+
+  function renderSummary() {
+    const box = $('summary');
+    clear(box);
+    const d = summaryData();
+    const { rows, mx } = d;
     const excludedN = uniqueByKey(filteredMails(true).filter((m) => !m.error && isExcluded(m))).length;
     const dupN = filteredMails(true).filter((m) => !m.error && (state.sumIncExcluded || !isExcluded(m))).length - rows.length;
 
+    const saveSel = el('select', { id: 'sumSaveKind', onchange: (ev) => { state.reportWithMails = ev.target.value === 'mails'; } }, [
+      el('option', { value: 'sum', text: '集計だけ', selected: !state.reportWithMails }),
+      el('option', { value: 'mails', text: '集計＋メール一覧', selected: state.reportWithMails })
+    ]);
+    const saveBtn = el('button', { class: 'btn small primary', type: 'button', disabled: !rows.length,
+      onclick: () => download(`集計-${stamp()}.html`, reportHtml(summaryData(), state.reportWithMails), 'text/html;charset=utf-8') }, 'HTML で保存');
     box.appendChild(el('div', { class: 'sum-head' }, [
       el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。',
         dupN > 0 ? el('span', { class: 'note', text: `（同じメールが複数のファイルにある ${dupN} 件は、1 件として数えています）` }) : null]),
       el('label', null, [el('input', { type: 'checkbox', checked: state.sumIncExcluded, onchange: (ev) => { state.sumIncExcluded = ev.target.checked; render(); } }),
-        `「書き出しから外す」カテゴリも含める（${excludedN} 件）`])
+        `「書き出しから外す」カテゴリも含める（${excludedN} 件）`]),
+      el('div', { class: 'sum-save' }, [el('label', { for: 'sumSaveKind', text: '保存する内容' }), saveSel, saveBtn])
     ]));
     if (!rows.length) { box.appendChild(el('p', { class: 'note', text: '集計するメールがありません。' })); return; }
 
-    // 主×副
-    const mx = Sum.matrix(rows, mainCats, subCats);
+    box.appendChild(el('div', { class: 'sum-kpis' }, kpis(d).map((k) => el('div', { class: 'sum-kpi' }, [el('b', { text: k.value }), el('span', { text: k.label })]))));
+
+    // 節への移動
+    const TOC = [['sum-main', '主の割合'], ['sum-sub', '副の割合'], ['sum-alloc', '配分試算'], ['sum-matrix', '主 × 副'], ['sum-month', '月別'], ['sum-ss', 'SS 別']];
+    box.appendChild(el('nav', { class: 'sum-toc', 'aria-label': '集計の目次' }, TOC.map(([id, label]) =>
+      el('button', { type: 'button', class: 'link', onclick: () => { const t = $(id); if (t) t.scrollIntoView({ block: 'start' }); } }, label))));
+
+    // 割合 → 配分試算（目的）→ 詳しい表
+    box.appendChild(sharesSection('sum-main', '主カテゴリの割合', d.shMain, 'main', 'cat', '集計_主の割合'));
+    box.appendChild(sharesSection('sum-sub', '副カテゴリの割合', d.shSub, 'sub', 'sub', '集計_副の割合'));
+    box.appendChild(allocSection(d));
+
+    // 主×副（件数 / 全体比 / 行内比）
+    const mode = state.sumMatrixMode;
+    const msh = Sum.matrixShares(mx);
+    const val = (r, c) => (mode === 'all' ? msh.all[r][c] : mode === 'row' ? msh.row[r][c] : mx.cells[r][c]);
+    const vmax = mode === 'all' ? msh.maxAll : mode === 'row' ? msh.maxRow : mx.max;
+    const show = (v) => (mode === 'count' ? String(v) : Rep.pct(v));
+    const isSmall = (r) => mode === 'row' && mx.rowTotal[r] > 0 && mx.rowTotal[r] < Rep.SMALL_N;
     const t1 = el('table', { class: 'sum-table matrix' });
     t1.appendChild(el('thead', null, el('tr', null, [el('th', { class: 'corner', text: '主 ＼ 副' }),
       ...mx.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'sub') })), el('th', { class: 'tot', text: '合計' })])));
     const tb1 = el('tbody');
     for (const r of mx.rows) {
-      const tr = el('tr', null, el('th', { class: 'rowh' }, el('button', { type: 'button', class: 'link', onclick: () => drill({ cat: mainKeyToFilter(r) }) }, keyName(r, 'main'))));
+      const tr = el('tr', null, el('th', { class: 'rowh' }, [el('button', { type: 'button', class: 'link', onclick: () => drill({ cat: mainKeyToFilter(r) }) }, keyName(r, 'main')), isSmall(r) ? ' ※' : null]));
       for (const c of mx.cols) {
-        const n = mx.cells[r][c];
-        tr.appendChild(el('td', { class: 'num', style: heat(n, mx.max) }, n ? el('button', { type: 'button', class: 'link num', title: `${keyName(r, 'main')} × ${keyName(c, 'sub')}`,
-          onclick: () => drill({ cat: mainKeyToFilter(r), sub: c }) }, String(n)) : el('span', { class: 'zero', text: '·' })));
+        const n = mx.cells[r][c], v = val(r, c);
+        tr.appendChild(el('td', { class: 'num', style: heat(v, vmax) }, n ? el('button', { type: 'button', class: 'link num', title: `${keyName(r, 'main')} × ${keyName(c, 'sub')}: ${n} 件`,
+          onclick: () => drill({ cat: mainKeyToFilter(r), sub: c }) }, show(v)) : el('span', { class: 'zero', text: '·' })));
       }
-      tr.appendChild(el('td', { class: 'num tot', text: String(mx.rowTotal[r]) }));
+      const rt = mode === 'count' ? String(mx.rowTotal[r]) : mode === 'all' ? Rep.pct(mx.total ? mx.rowTotal[r] / mx.total : 0) : Rep.rowTotLabel(mx.rowTotal[r]);
+      tr.appendChild(el('td', { class: 'num tot', text: rt }));
       tb1.appendChild(tr);
     }
-    const ft = el('tr', { class: 'foot' }, el('th', { text: '合計' }));
-    for (const c of mx.cols) ft.appendChild(el('td', { class: 'num tot' }, mx.colTotal[c] ? el('button', { type: 'button', class: 'link num', onclick: () => drill({ sub: c }) }, String(mx.colTotal[c])) : '0'));
-    ft.appendChild(el('td', { class: 'num tot', text: String(mx.total) }));
-    tb1.appendChild(ft);
+    if (mode !== 'row') {
+      const ft = el('tr', { class: 'foot' }, el('th', { text: '合計' }));
+      for (const c of mx.cols) {
+        const txt = mode === 'count' ? String(mx.colTotal[c]) : Rep.pct(mx.total ? mx.colTotal[c] / mx.total : 0);
+        ft.appendChild(el('td', { class: 'num tot' }, mx.colTotal[c] ? el('button', { type: 'button', class: 'link num', onclick: () => drill({ sub: c }) }, txt) : txt));
+      }
+      ft.appendChild(el('td', { class: 'num tot', text: mode === 'count' ? String(mx.total) : '100.0%' }));
+      tb1.appendChild(ft);
+    }
     t1.appendChild(tb1);
-    const matrixCsv = () => [['主 ＼ 副', ...mx.cols.map((c) => keyName(c, 'sub')), '合計'],
-      ...mx.rows.map((r) => [keyName(r, 'main'), ...mx.cols.map((c) => mx.cells[r][c]), mx.rowTotal[r]]),
-      ['合計', ...mx.cols.map((c) => mx.colTotal[c]), mx.total]];
-    box.appendChild(section('主カテゴリ × 副カテゴリ', '件数が多いマスほど濃く表示しています。', t1, csvButton('CSV で書き出す', '集計_主x副', matrixCsv)));
+    const modeSel = el('div', { class: 'sum-modes', role: 'radiogroup', 'aria-label': '主 × 副の表示' }, [el('span', { class: 'lbl', text: '表示:' }), ...Object.keys(MATRIX_MODES).map((k) =>
+      el('label', null, [el('input', { type: 'radio', name: 'mxmode', value: k, checked: mode === k, onchange: () => { state.sumMatrixMode = k; render(); } }), MATRIX_MODES[k]]))]);
+    const fmtCsv = (r, c) => (mode === 'count' ? mx.cells[r][c] : (val(r, c) * 100).toFixed(1));
+    const rowTotCsv = (r) => (mode === 'count' ? mx.rowTotal[r] : mode === 'all' ? (mx.total ? mx.rowTotal[r] / mx.total * 100 : 0).toFixed(1) : (mx.rowTotal[r] ? `100.0（n=${mx.rowTotal[r]}）` : ''));
+    const matrixCsv = () => [[`主 ＼ 副（${MATRIX_MODES[mode]}${mode === 'count' ? '' : '・%'}）`, ...mx.cols.map((c) => keyName(c, 'sub')), '合計'],
+      ...mx.rows.map((r) => [keyName(r, 'main'), ...mx.cols.map((c) => fmtCsv(r, c)), rowTotCsv(r)]),
+      ...(mode === 'row' ? [] : [['合計', ...mx.cols.map((c) => (mode === 'count' ? mx.colTotal[c] : (mx.total ? mx.colTotal[c] / mx.total * 100 : 0).toFixed(1))), mode === 'count' ? mx.total : '100.0']])];
+    const mxNote = mode === 'all' ? `${mx.total} 件を 100% とした割合です。`
+      : mode === 'row' ? `行（主カテゴリ）ごとに 100% とした割合です。その段階のメールがどの設備に偏っているかが分かります。※ は母数 ${Rep.SMALL_N} 件未満で、割合がぶれやすい行です。`
+        : '件数が多いマスほど濃く表示しています。';
+    const sec1 = section('主カテゴリ × 副カテゴリ', mxNote, t1, csvButton('CSV で書き出す', '集計_主x副', matrixCsv));
+    sec1.id = 'sum-matrix';
+    sec1.insertBefore(modeSel, sec1.querySelector('.note'));
+    box.appendChild(sec1);
 
     // 月別
-    const mo = Sum.monthly(rows, mainCats);
+    const mo = d.mo;
+    const mc = monthlyChart(d);
     const t2 = el('table', { class: 'sum-table' });
     t2.appendChild(el('thead', null, el('tr', null, [el('th', { text: '月' }), ...mo.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
     const tb2 = el('tbody');
@@ -1069,7 +1328,7 @@
         const last = new Date(y, m, 0).getDate();
         drill({ dateFrom: `${r.month}-01`, dateTo: `${r.month}-${String(last).padStart(2, '0')}` });
       };
-      const label = isDate ? r.month.replace('-', '年') + '月' : r.month;
+      const label = monthLabel(r.month);
       tb2.appendChild(el('tr', null, [
         el('th', { class: 'rowh' }, isDate && r.total ? el('button', { type: 'button', class: 'link', onclick: go }, label) : label),
         ...mo.cols.map((c) => el('td', { class: 'num', text: r.counts[c] ? String(r.counts[c]) : '·' })),
@@ -1079,10 +1338,17 @@
     }
     t2.appendChild(tb2);
     const monthCsv = () => [['月', ...mo.cols.map((c) => keyName(c, 'main')), '合計'], ...mo.rows.map((r) => [r.month, ...mo.cols.map((c) => r.counts[c]), r.total])];
-    box.appendChild(section('月別の推移（主カテゴリ別）', 'メールの送信日（無ければ受信日）で数えています。月をクリックすると、その月の一覧へ移ります。', t2, csvButton('CSV で書き出す', '集計_月別', monthCsv)));
+    const sec2 = section('月別の推移（主カテゴリ別）', 'メールの送信日（無ければ受信日）で数えています。月をクリックすると、その月の一覧へ移ります。' + (mc.note ? mc.note + '。' : ''), t2, csvButton('CSV で書き出す', '集計_月別', monthCsv));
+    sec2.id = 'sum-month';
+    if (mc.bars.length) {
+      const chart = el('div', { class: 'sum-chart' });
+      chart.innerHTML = Rep.legend(mc.series) + Rep.stackedBars(mc.series, mc.bars, { title: '月別の推移' });
+      sec2.insertBefore(chart, sec2.querySelector('.sum-wrap'));
+    }
+    box.appendChild(sec2);
 
     // SS 別
-    const ss = Sum.bySs(rows, mainCats);
+    const ss = d.ss;
     const t3 = el('table', { class: 'sum-table' });
     t3.appendChild(el('thead', null, el('tr', null, [el('th', { text: 'SS' }), ...ss.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
     const tb3 = el('tbody');
@@ -1097,14 +1363,17 @@
     t3.appendChild(tb3);
     const ssCsv = () => [['SS', ...ss.cols.map((c) => keyName(c, 'main')), '合計'], ...ss.rows.map((r) => [r.ss, ...ss.cols.map((c) => r.counts[c]), r.total])];
     const noSs = ss.rows.find((r) => r.ss === Sum.NO_SS);
-    box.appendChild(section('SS 別', `SS 名は添付 xlsx の「SS名」欄、無ければ件名・本文から取っています。${noSs ? `取り出せなかった ${noSs.total} 件は「${Sum.NO_SS}」にまとめています（詳細画面で入力できます）。` : ''}`, t3, csvButton('CSV で書き出す', '集計_SS別', ssCsv)));
+    const sec3 = section('SS 別', `SS 名は添付 xlsx の「SS名」欄、無ければ件名・本文から取っています。${noSs ? `取り出せなかった ${noSs.total} 件は「${Sum.NO_SS}」にまとめています（詳細画面で入力できます）。` : ''}`, t3, csvButton('CSV で書き出す', '集計_SS別', ssCsv));
+    sec3.id = 'sum-ss';
+    box.appendChild(sec3);
   }
 
   function section(title, note, table, action) {
     return el('section', { class: 'sum-sec' }, [
       el('div', { class: 'sum-sec-head' }, [el('h3', { text: title }), action]),
       el('p', { class: 'note', text: note }),
-      el('div', { class: 'sum-wrap' }, table)
+      // 横・縦にスクロールする枠。キーボードでも動かせるようにフォーカスを受ける
+      el('div', { class: 'sum-wrap', tabindex: '0', role: 'region', 'aria-label': title }, table)
     ]);
   }
 

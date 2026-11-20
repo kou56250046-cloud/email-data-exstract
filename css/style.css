@@ -263,6 +263,39 @@ body.with-detail .list .snip { display: none; }
 .sum-table .barc { width: 160px; }
 .sum-table .bar { height: 10px; background: #f1f3f5; border-radius: 5px; overflow: hidden; }
 .sum-table .bar span { display: block; height: 100%; background: var(--accent); }
+.sum-save { display: flex; gap: 6px; align-items: center; }
+.sum-kpis { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.sum-kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 14px; min-width: 140px; }
+.sum-kpi b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+.sum-kpi span { color: var(--sub); font-size: 12px; }
+.sum-cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.sum-cols > table { flex: 0 1 auto; min-width: 280px; }
+.sum-chart { overflow: auto; min-width: 0; flex: 1 1 560px; }
+.sum-chart svg { display: block; max-width: none; } /* 縮めると文字が読めなくなるので、狭いときは横にスクロールさせる */
+.sum-modes, .sum-alloc-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 6px 0; font-size: 13px; }
+.sum-modes .lbl { color: var(--sub); }
+.sum-alloc-form { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; }
+.sum-alloc-form legend { padding: 0 4px; color: var(--sub); font-size: 12px; }
+.sum-alloc-form .num-in { width: 7em; }
+.sum-alloc-form input:disabled { opacity: .5; }
+.sum-save label { font-size: 12.5px; color: var(--sub); }
+.sum-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin: 0 0 4px; }
+.sum-target { margin: 6px 0; font-size: 13.5px; }
+.sum-target.filtered { padding: 4px 10px; background: #fff3bf; border-left: 4px solid #e67700; font-weight: bold; }
+/* 注意。色だけに頼らないよう、頭の「注意:」と左の線で示す */
+.warn-note { color: #7a2e00; font-size: 14px; margin: 6px 0; padding: 4px 10px; border-left: 4px solid #c2410c; background: #fff4ec; }
+.warn-note::before { content: "注意: "; font-weight: bold; }
+.sum-wrap:focus-visible, .link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; }
+.legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+/* report.js が作る表（配分試算） */
+.sum-sec .t { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+.sum-sec .t th, .sum-sec .t td { border: 1px solid var(--line); padding: 5px 8px; }
+.sum-sec .t thead th { background: #f1f3f5; color: var(--sub); font-weight: normal; position: sticky; top: 0; }
+.sum-sec .t .r { text-align: right; font-variant-numeric: tabular-nums; }
+.sum-sec .t .h { text-align: left; font-weight: normal; background: #fafbfc; white-space: nowrap; }
+.sum-sec .t .tot { font-weight: bold; background: #f8f9fa; }
+.sum-sec .t .warn { color: #c92a2a; font-weight: bold; }
 .link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px; }
 .link:hover { text-decoration-color: currentColor; }
 .link.num { font-variant-numeric: tabular-nums; }

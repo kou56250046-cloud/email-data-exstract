@@ -187,6 +187,63 @@
     return rec;
   }
 
+  // ---------- フォルダの選択 ----------
+  // ブラウザの選択画面は 1 フォルダしか選べないため、親フォルダを選んでもらい、直下のフォルダをここで選ばせる
+
+  const HERE = '/'; // 親フォルダ直下の .msg をまとめる行のキー（フォルダ名に / は使えないので衝突しない）
+  let folderPick = { groups: [] };
+
+  /** webkitRelativePath（"親/子/孫/x.msg"）を直下のフォルダ（子）ごとにまとめる */
+  function groupByFolder(items) {
+    const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
+    const map = new Map();
+    for (const it of items) {
+      if (!/\.msg$/i.test(it.file.name)) continue;
+      const parts = it.path.split('/');
+      const key = parts.length <= 2 ? HERE : parts[1];
+      if (!map.has(key)) map.set(key, { key, root: parts[0], items: [], loaded: 0 });
+      const g = map.get(key);
+      g.items.push(it);
+      if (known.has(it.path + '|' + it.file.size + '|' + it.file.lastModified)) g.loaded++;
+    }
+    return [...map.values()].sort((a, b) => (a.key === HERE) - (b.key === HERE) || a.key.localeCompare(b.key, 'ja'));
+  }
+
+  function chooseFolders(items) {
+    const groups = groupByFolder(items);
+    if (!groups.length) {
+      showProgress('選んだフォルダに .msg がありません', 1, true);
+      return;
+    }
+    if (groups.length === 1) { addFiles(groups[0].items); return; }
+    folderPick = { groups };
+    const list = $('folderList');
+    clear(list);
+    $('folderRoot').textContent = groups[0].root;
+    for (const g of groups) {
+      const name = g.key === HERE ? '（このフォルダ直下）' : g.key;
+      list.appendChild(el('li', null, el('label', null, [
+        el('input', { type: 'checkbox', value: g.key, checked: true, onchange: updateFolderCount }),
+        el('span', { class: 'fname', text: name, title: name }),
+        el('span', { class: 'n', text: `${g.items.length} 件` + (g.loaded ? `（うち読み込み済み ${g.loaded} 件）` : '') })
+      ])));
+    }
+    $('folderAll').checked = true;
+    updateFolderCount();
+    $('folderDlg').showModal();
+  }
+
+  function updateFolderCount() {
+    const boxes = [...$('folderList').querySelectorAll('input[type=checkbox]')];
+    const on = boxes.filter((c) => c.checked);
+    const keys = new Set(on.map((c) => c.value));
+    const files = folderPick.groups.filter((g) => keys.has(g.key)).reduce((a, g) => a + g.items.length, 0);
+    $('folderAll').checked = on.length === boxes.length;
+    $('folderAll').indeterminate = on.length > 0 && on.length < boxes.length;
+    $('folderLoad').disabled = files === 0;
+    $('folderLoad').textContent = `${on.length} フォルダ（${files} 件）を読み込む`;
+  }
+
   async function addFiles(items) {
     if (state.loading) return;
     const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
@@ -1055,8 +1112,20 @@
       ev.target.value = '';
     });
     $('pickDir').addEventListener('change', (ev) => {
-      addFiles([...ev.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name })));
+      const items = [...ev.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }));
       ev.target.value = '';
+      chooseFolders(items);
+    });
+    $('folderAll').addEventListener('change', (ev) => {
+      for (const c of $('folderList').querySelectorAll('input[type=checkbox]')) c.checked = ev.target.checked;
+      updateFolderCount();
+    });
+    $('folderLoad').addEventListener('click', () => {
+      const picked = new Set([...$('folderList').querySelectorAll('input:checked')].map((c) => c.value));
+      const items = folderPick.groups.filter((g) => picked.has(g.key)).flatMap((g) => g.items);
+      $('folderDlg').close();
+      folderPick = { groups: [] };
+      addFiles(items);
     });
     document.addEventListener('dragover', (ev) => { ev.preventDefault(); document.body.classList.add('dragging'); });
     document.addEventListener('dragleave', (ev) => { if (!ev.relatedTarget) document.body.classList.remove('dragging'); });

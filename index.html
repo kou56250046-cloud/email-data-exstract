@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- メールは機密。外部への通信を一切させない -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-fAsnAdUnaoJcYZlDZ1zWp08YndMB2jBDH9Y1upNqbs0=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-0fQ4RHsdB8WI92b1xqk6CDAdGhALai8zp+1XqEBmLK0=' 'sha256-T+RHAlIbZFpS7etrAsyEintp166498AViIn7QSMxAak='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-fAsnAdUnaoJcYZlDZ1zWp08YndMB2jBDH9Y1upNqbs0=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-0fQ4RHsdB8WI92b1xqk6CDAdGhALai8zp+1XqEBmLK0=' 'sha256-pHbdQrO+pHYtRuQPYTm35qFF+0MbH7szhsw3Wxes1Ro='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
 <title>msg メール抽出・分類</title>
 <style>
 :root {
@@ -277,6 +277,15 @@ body.with-detail .list .snip { display: none; }
 .link:hover { text-decoration-color: currentColor; }
 .link.num { font-variant-numeric: tabular-nums; }
 .link.muted { color: var(--sub); }
+
+/* フォルダの選択 */
+.folder-all { display: block; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.folder-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
+.folder-list li label { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.folder-list li label:hover { background: #f8f9fa; }
+.folder-list .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-list .n { color: var(--sub); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.folder-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
 </style>
 </head>
 <body>
@@ -344,7 +353,7 @@ body.with-detail .list .snip { display: none; }
 
     <div class="empty" id="empty">
       <p><strong>.msg ファイルを読み込んでください。</strong></p>
-      <p>フォルダごとドロップすると中の .msg をまとめて読み込みます。1000 件以上でも読めます。</p>
+      <p>「フォルダを選ぶ」で親フォルダを選ぶと、中のフォルダを複数選んで読み込めます。1000 件以上でも読めます。</p>
       <p><button class="btn small" type="button" data-open-help>使い方を見る</button></p>
     </div>
 
@@ -425,6 +434,18 @@ body.with-detail .list .snip { display: none; }
   </div>
 </dialog>
 
+<dialog id="folderDlg" class="dlg">
+  <form method="dialog" class="dlg-head"><h2>読み込むフォルダを選ぶ</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
+  <div class="dlg-body">
+    <p class="note">「<b id="folderRoot"></b>」の中のフォルダです。読み込むフォルダにチェックを入れてください。下の階層のフォルダは、直下のフォルダにまとめて数えています。</p>
+    <label class="folder-all"><input type="checkbox" id="folderAll" checked> すべて選ぶ / すべて外す</label>
+    <ul class="folder-list" id="folderList"></ul>
+    <div class="folder-foot">
+      <button class="btn primary" id="folderLoad" type="button">読み込む</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="exportDlg" class="dlg">
   <form method="dialog" class="dlg-head"><h2>書き出し</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
   <div class="dlg-body">
@@ -462,7 +483,9 @@ body.with-detail .list .snip { display: none; }
     <section id="h-load">
       <h3>1. 読み込む</h3>
       <ul>
-        <li>「フォルダを選ぶ」で、.msg が入ったフォルダをまとめて読み込みます。下の階層のフォルダも含みます。</li>
+        <li>「フォルダを選ぶ」で、.msg が入ったフォルダを読み込みます。下の階層のフォルダも含みます。</li>
+        <li><b>複数のフォルダを読み込む</b>: それらのフォルダが入っている<b>親フォルダ</b>を選ぶと、中のフォルダが件数つきの一覧で出ます。読み込みたいフォルダにチェックを入れて「読み込む」を押します（ブラウザの選択画面では一度に 1 フォルダしか選べないため、この形にしています）。</li>
+        <li>フォルダを選ぶと、ブラウザが「ファイルをこのサイトにアップロードしますか？」と確認します。ブラウザの決まった表示で、実際には外部へ送られず、この PC の中で読むだけです。</li>
         <li>「ファイルを選ぶ」で 1 件ずつ、または画面へのドラッグ＆ドロップでも読み込めます。</li>
         <li>続けて別のフォルダを読み込むと一覧に追加されます。同じファイルは二重に読み込みません。</li>
         <li>壊れたファイルや .msg でないものは、左の「読めなかったファイル」に入ります。全体の読み込みは止まりません。</li>
@@ -2431,6 +2454,63 @@ body.with-detail .list .snip { display: none; }
     return rec;
   }
 
+  // ---------- フォルダの選択 ----------
+  // ブラウザの選択画面は 1 フォルダしか選べないため、親フォルダを選んでもらい、直下のフォルダをここで選ばせる
+
+  const HERE = '/'; // 親フォルダ直下の .msg をまとめる行のキー（フォルダ名に / は使えないので衝突しない）
+  let folderPick = { groups: [] };
+
+  /** webkitRelativePath（"親/子/孫/x.msg"）を直下のフォルダ（子）ごとにまとめる */
+  function groupByFolder(items) {
+    const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
+    const map = new Map();
+    for (const it of items) {
+      if (!/\.msg$/i.test(it.file.name)) continue;
+      const parts = it.path.split('/');
+      const key = parts.length <= 2 ? HERE : parts[1];
+      if (!map.has(key)) map.set(key, { key, root: parts[0], items: [], loaded: 0 });
+      const g = map.get(key);
+      g.items.push(it);
+      if (known.has(it.path + '|' + it.file.size + '|' + it.file.lastModified)) g.loaded++;
+    }
+    return [...map.values()].sort((a, b) => (a.key === HERE) - (b.key === HERE) || a.key.localeCompare(b.key, 'ja'));
+  }
+
+  function chooseFolders(items) {
+    const groups = groupByFolder(items);
+    if (!groups.length) {
+      showProgress('選んだフォルダに .msg がありません', 1, true);
+      return;
+    }
+    if (groups.length === 1) { addFiles(groups[0].items); return; }
+    folderPick = { groups };
+    const list = $('folderList');
+    clear(list);
+    $('folderRoot').textContent = groups[0].root;
+    for (const g of groups) {
+      const name = g.key === HERE ? '（このフォルダ直下）' : g.key;
+      list.appendChild(el('li', null, el('label', null, [
+        el('input', { type: 'checkbox', value: g.key, checked: true, onchange: updateFolderCount }),
+        el('span', { class: 'fname', text: name, title: name }),
+        el('span', { class: 'n', text: `${g.items.length} 件` + (g.loaded ? `（うち読み込み済み ${g.loaded} 件）` : '') })
+      ])));
+    }
+    $('folderAll').checked = true;
+    updateFolderCount();
+    $('folderDlg').showModal();
+  }
+
+  function updateFolderCount() {
+    const boxes = [...$('folderList').querySelectorAll('input[type=checkbox]')];
+    const on = boxes.filter((c) => c.checked);
+    const keys = new Set(on.map((c) => c.value));
+    const files = folderPick.groups.filter((g) => keys.has(g.key)).reduce((a, g) => a + g.items.length, 0);
+    $('folderAll').checked = on.length === boxes.length;
+    $('folderAll').indeterminate = on.length > 0 && on.length < boxes.length;
+    $('folderLoad').disabled = files === 0;
+    $('folderLoad').textContent = `${on.length} フォルダ（${files} 件）を読み込む`;
+  }
+
   async function addFiles(items) {
     if (state.loading) return;
     const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
@@ -3299,8 +3379,20 @@ body.with-detail .list .snip { display: none; }
       ev.target.value = '';
     });
     $('pickDir').addEventListener('change', (ev) => {
-      addFiles([...ev.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name })));
+      const items = [...ev.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }));
       ev.target.value = '';
+      chooseFolders(items);
+    });
+    $('folderAll').addEventListener('change', (ev) => {
+      for (const c of $('folderList').querySelectorAll('input[type=checkbox]')) c.checked = ev.target.checked;
+      updateFolderCount();
+    });
+    $('folderLoad').addEventListener('click', () => {
+      const picked = new Set([...$('folderList').querySelectorAll('input:checked')].map((c) => c.value));
+      const items = folderPick.groups.filter((g) => picked.has(g.key)).flatMap((g) => g.items);
+      $('folderDlg').close();
+      folderPick = { groups: [] };
+      addFiles(items);
     });
     document.addEventListener('dragover', (ev) => { ev.preventDefault(); document.body.classList.add('dragging'); });
     document.addEventListener('dragleave', (ev) => { if (!ev.relatedTarget) document.body.classList.remove('dragging'); });

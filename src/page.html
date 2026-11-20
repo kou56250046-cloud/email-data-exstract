@@ -73,7 +73,7 @@
 
     <div class="empty" id="empty">
       <p><strong>.msg ファイルを読み込んでください。</strong></p>
-      <p>フォルダごとドロップすると中の .msg をまとめて読み込みます。1000 件以上でも読めます。</p>
+      <p>「フォルダを選ぶ」で親フォルダを選ぶと、中のフォルダを複数選んで読み込めます。1000 件以上でも読めます。</p>
       <p><button class="btn small" type="button" data-open-help>使い方を見る</button></p>
     </div>
 
@@ -154,6 +154,18 @@
   </div>
 </dialog>
 
+<dialog id="folderDlg" class="dlg">
+  <form method="dialog" class="dlg-head"><h2>読み込むフォルダを選ぶ</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
+  <div class="dlg-body">
+    <p class="note">「<b id="folderRoot"></b>」の中のフォルダです。読み込むフォルダにチェックを入れてください。下の階層のフォルダは、直下のフォルダにまとめて数えています。</p>
+    <label class="folder-all"><input type="checkbox" id="folderAll" checked> すべて選ぶ / すべて外す</label>
+    <ul class="folder-list" id="folderList"></ul>
+    <div class="folder-foot">
+      <button class="btn primary" id="folderLoad" type="button">読み込む</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="exportDlg" class="dlg">
   <form method="dialog" class="dlg-head"><h2>書き出し</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
   <div class="dlg-body">
@@ -191,7 +203,9 @@
     <section id="h-load">
       <h3>1. 読み込む</h3>
       <ul>
-        <li>「フォルダを選ぶ」で、.msg が入ったフォルダをまとめて読み込みます。下の階層のフォルダも含みます。</li>
+        <li>「フォルダを選ぶ」で、.msg が入ったフォルダを読み込みます。下の階層のフォルダも含みます。</li>
+        <li><b>複数のフォルダを読み込む</b>: それらのフォルダが入っている<b>親フォルダ</b>を選ぶと、中のフォルダが件数つきの一覧で出ます。読み込みたいフォルダにチェックを入れて「読み込む」を押します（ブラウザの選択画面では一度に 1 フォルダしか選べないため、この形にしています）。</li>
+        <li>フォルダを選ぶと、ブラウザが「ファイルをこのサイトにアップロードしますか？」と確認します。ブラウザの決まった表示で、実際には外部へ送られず、この PC の中で読むだけです。</li>
         <li>「ファイルを選ぶ」で 1 件ずつ、または画面へのドラッグ＆ドロップでも読み込めます。</li>
         <li>続けて別のフォルダを読み込むと一覧に追加されます。同じファイルは二重に読み込みません。</li>
         <li>壊れたファイルや .msg でないものは、左の「読めなかったファイル」に入ります。全体の読み込みは止まりません。</li>

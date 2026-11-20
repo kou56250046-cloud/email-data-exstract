@@ -267,3 +267,12 @@ body.with-detail .list .snip { display: none; }
 .link:hover { text-decoration-color: currentColor; }
 .link.num { font-variant-numeric: tabular-nums; }
 .link.muted { color: var(--sub); }
+
+/* フォルダの選択 */
+.folder-all { display: block; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.folder-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
+.folder-list li label { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.folder-list li label:hover { background: #f8f9fa; }
+.folder-list .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-list .n { color: var(--sub); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.folder-foot { display: flex; justify-content: flex-end; margin-top: 12px; }

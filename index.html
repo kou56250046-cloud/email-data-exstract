@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- メールは機密。外部への通信を一切させない -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src 'self' blob: data:; connect-src 'none'; form-action 'none'">
+<title>msg メール抽出・分類</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>msg メール抽出・分類</h1>
+  <div class="load">
+    <label class="btn primary">ファイルを選ぶ<input type="file" id="pickFiles" accept=".msg" multiple hidden></label>
+    <label class="btn">フォルダを選ぶ<input type="file" id="pickDir" webkitdirectory multiple hidden></label>
+    <span class="hint">または .msg / フォルダをこの画面にドロップ</span>
+  </div>
+  <div class="actions">
+    <button class="btn" id="openSettings" type="button">分類の設定</button>
+    <button class="btn" id="openExport" type="button">書き出し</button>
+    <button class="btn ghost" id="clearAll" type="button">一覧を空にする</button>
+  </div>
+</header>
+
+<div class="progress" id="progress" hidden>
+  <div class="bar"><span id="progressBar"></span></div>
+  <span id="progressText"></span>
+</div>
+
+<div class="layout">
+  <aside class="side">
+    <h2>カテゴリ</h2>
+    <ul class="cats" id="catList"></ul>
+    <p class="note">ファイルは端末の中で読むだけで、外部へは送信しません。</p>
+  </aside>
+
+  <main class="main">
+    <div class="filters">
+      <input type="search" id="q" placeholder="件名・本文・送信者・添付名で検索" aria-label="検索">
+      <input type="search" id="fromQ" placeholder="送信者" aria-label="送信者で絞り込み">
+      <label>期間 <input type="date" id="dateFrom" aria-label="開始日"> 〜 <input type="date" id="dateTo" aria-label="終了日"></label>
+      <select id="attQ" aria-label="添付">
+        <option value="">添付: すべて</option>
+        <option value="yes">添付あり</option>
+        <option value="no">添付なし</option>
+      </select>
+      <button class="btn ghost small" id="resetFilter" type="button">条件を消す</button>
+    </div>
+
+    <div class="bulk" id="bulk" hidden>
+      <span id="selCount"></span>
+      <select id="bulkCat" aria-label="付けるカテゴリ"></select>
+      <button class="btn small primary" id="bulkApply" type="button">にする</button>
+      <button class="btn small" id="bulkAuto" type="button">自動分類に戻す</button>
+      <button class="btn small ghost" id="bulkClear" type="button">選択を解除</button>
+    </div>
+
+    <div class="empty" id="empty">
+      <p><strong>.msg ファイルを読み込んでください。</strong></p>
+      <p>フォルダごとドロップすると中の .msg をまとめて読み込みます。1000 件以上でも読めます。</p>
+    </div>
+
+    <div class="tablewrap" id="tableWrap" hidden>
+      <table class="list">
+        <thead>
+          <tr>
+            <th class="chk"><input type="checkbox" id="chkPage" aria-label="このページをすべて選択"></th>
+            <th class="cat">カテゴリ</th>
+            <th class="sort date" data-sort="date">日時</th>
+            <th class="sort from" data-sort="from">送信者</th>
+            <th class="sort subject" data-sort="subject">件名</th>
+            <th class="att" title="添付">添付</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="pager" id="pager"></div>
+    </div>
+  </main>
+
+  <section class="detail" id="detail" hidden aria-label="メールの詳細">
+    <div class="detail-head">
+      <button class="btn small ghost" id="prevMail" type="button" title="前のメール (k)">↑</button>
+      <button class="btn small ghost" id="nextMail" type="button" title="次のメール (j)">↓</button>
+      <select id="detailCat" aria-label="このメールのカテゴリ"></select>
+      <button class="btn small ghost close" id="closeDetail" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </section>
+</div>
+
+<dialog id="settings" class="dlg wide">
+  <form method="dialog" class="dlg-head"><h2>分類の設定</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
+  <div class="dlg-body">
+    <section>
+      <h3>カテゴリ</h3>
+      <p class="note">「書き出しから外す」にしたカテゴリは、書き出し時に既定で除外されます。</p>
+      <ul class="catedit" id="catEdit"></ul>
+      <button class="btn small" id="addCat" type="button">＋ カテゴリを追加</button>
+    </section>
+    <section>
+      <h3>自動分類のルール</h3>
+      <p class="note">上から順に調べ、最初に当てはまったルールのカテゴリを付けます。1つのルールに条件を複数入れると「すべて満たす」になります。手で付けたカテゴリはルールより優先されます。</p>
+      <ol class="rules" id="ruleEdit"></ol>
+      <button class="btn small" id="addRule" type="button">＋ ルールを追加</button>
+    </section>
+    <section>
+      <h3>よく来る送信者ドメイン</h3>
+      <p class="note">未分類のメールが多い順です。カテゴリを選ぶとドメインのルールを追加します。</p>
+      <table class="domains"><tbody id="domainList"></tbody></table>
+    </section>
+    <section>
+      <h3>設定の保存・移行</h3>
+      <p class="note">設定はこのブラウザに自動保存されます。別の PC へ移すときはファイルに書き出してください。</p>
+      <button class="btn small" id="exportSettings" type="button">設定を書き出す</button>
+      <label class="btn small">設定を読み込む<input type="file" id="importSettings" accept=".json" hidden></label>
+      <button class="btn small ghost" id="resetSettings" type="button">初期設定に戻す</button>
+    </section>
+  </div>
+</dialog>
+
+<dialog id="exportDlg" class="dlg">
+  <form method="dialog" class="dlg-head"><h2>書き出し</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
+  <div class="dlg-body">
+    <fieldset>
+      <legend>対象</legend>
+      <label><input type="radio" name="scope" value="filtered" checked> 絞り込み中のメール（<span id="cntFiltered">0</span> 件）</label>
+      <label><input type="radio" name="scope" value="selected"> 選択中のメール（<span id="cntSelected">0</span> 件）</label>
+      <label><input type="radio" name="scope" value="all"> すべて（<span id="cntAll">0</span> 件）</label>
+      <label><input type="checkbox" id="incExcluded"> 「書き出しから外す」カテゴリも含める</label>
+    </fieldset>
+    <p class="note" id="exportCount"></p>
+    <div class="exp-buttons">
+      <button class="btn primary" data-fmt="csv" type="button">CSV（Excel）</button>
+      <button class="btn" data-fmt="html" type="button">閲覧用 HTML</button>
+      <button class="btn" data-fmt="json" type="button">JSON</button>
+    </div>
+    <p class="note">CSV は Excel でそのまま開けます（UTF-8 BOM 付き）。本文が 32,000 文字を超える場合は切り詰めます。添付ファイルの中身は含まれません。詳細画面から個別に保存してください。</p>
+  </div>
+</dialog>
+
+<script src="js/cfb.js"></script>
+<script src="js/rtf.js"></script>
+<script src="js/msg.js"></script>
+<script src="js/xlsx.js"></script>
+<script src="js/classify.js"></script>
+<script src="js/store.js"></script>
+<script src="js/export.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

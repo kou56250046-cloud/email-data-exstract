@@ -56,6 +56,7 @@ body.dragging::after {
 .progress { display: flex; align-items: center; gap: 12px; padding: 6px 16px; background: #fff8f0; border-bottom: 1px solid var(--line); font-size: 13px; }
 .progress .bar { width: 240px; height: 6px; background: #f1d9c4; border-radius: 3px; overflow: hidden; }
 .progress .bar span { display: block; height: 100%; background: var(--accent); transition: width .2s; }
+.progress[hidden] { display: none; }
 .progress.done { background: #ebfbee; }
 .progress.done .bar { display: none; }
 
@@ -194,3 +195,20 @@ body.with-detail .list .snip { display: none; }
   body.with-detail .layout { grid-template-columns: 0 1fr minmax(420px, 55%); }
   body.with-detail .side { display: none; }
 }
+
+/* 使い方 */
+.help .dlg-body { line-height: 1.75; }
+.help-toc { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; background: #f8f9fa; border-radius: var(--radius); margin-bottom: 18px; font-size: 13px; }
+.help-toc a { color: var(--accent); text-decoration: none; }
+.help-toc a:hover { text-decoration: underline; }
+.help section { scroll-margin-top: 60px; }
+.help h3 { font-size: 15px; padding-bottom: 4px; border-bottom: 2px solid var(--line); }
+.help ul { margin: 6px 0; padding-left: 1.3em; }
+.help li { margin: 3px 0; }
+.help code, .help kbd { font-family: Consolas, monospace; font-size: 12px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: #f8f9fa; }
+.help-table-wrap { overflow-x: auto; }
+.help-table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
+.help-table th, .help-table td { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }
+.help-table thead th { background: #f1f3f5; color: var(--sub); font-weight: normal; white-space: nowrap; }
+.help-table tbody th { white-space: nowrap; background: #fff8f0; }
+.help-table td:nth-child(3) { background: #f4fbf6; }

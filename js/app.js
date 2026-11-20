@@ -904,6 +904,18 @@
       settingsChanged(true);
     });
 
+    const openHelp = () => { $('helpDlg').showModal(); $('helpDlg').scrollTop = 0; };
+    $('openHelp').addEventListener('click', openHelp);
+    for (const b of document.querySelectorAll('[data-open-help]')) b.addEventListener('click', openHelp);
+    // 目次は URL を変えずにダイアログ内をスクロールする
+    for (const a of document.querySelectorAll('.help-toc a')) {
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const t = document.getElementById(a.getAttribute('href').slice(1));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+
     $('openExport').addEventListener('click', () => { updateExportCount(); $('exportDlg').showModal(); });
     for (const r of document.querySelectorAll('input[name=scope]')) r.addEventListener('change', updateExportCount);
     $('incExcluded').addEventListener('change', updateExportCount);

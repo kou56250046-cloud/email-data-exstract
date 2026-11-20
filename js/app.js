@@ -5,6 +5,11 @@
 (function () {
   'use strict';
 
+  // 画面を書き換える前の HTML を控えておく（「このツールを保存」用）。
+  // build.mjs で 1 ファイルにまとめた index.html のときだけ、これだけで動くファイルになる
+  const STANDALONE = !document.querySelector('script[src], link[rel=stylesheet]');
+  const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
+
   const Msg = window.MsgParser, Cls = window.MsgClassify, Store = window.MsgStore, Exp = window.MsgExport, Xlsx = window.MsgXlsx;
   const $ = (id) => document.getElementById(id);
   const PAGE = 100;
@@ -903,6 +908,10 @@
       state.categories = d.categories; state.rules = d.rules;
       settingsChanged(true);
     });
+
+    const save = $('saveTool');
+    if (!STANDALONE) { save.disabled = true; save.title = '開発用の画面では使えません。node build.mjs で作った index.html から使ってください'; }
+    save.addEventListener('click', () => download('msg-extract-tool.html', PRISTINE, 'text/html;charset=utf-8'));
 
     const openHelp = () => { $('helpDlg').showModal(); $('helpDlg').scrollTop = 0; };
     $('openHelp').addEventListener('click', openHelp);

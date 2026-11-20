@@ -1,0 +1,9 @@
+# 実物の .msg は機密。リポジトリに入れない
+samples/
+samples-gen/
+*.msg
+!tests/**/*.mjs
+node_modules/
+.env.local
+.playwright-mcp/
+.serena/

@@ -34,6 +34,7 @@
   <aside class="side">
     <h2>主カテゴリ</h2>
     <ul class="cats" id="catList"></ul>
+    <p class="note dup-note" id="dupNote" hidden></p>
     <p class="note">ファイルは端末の中で読むだけで、外部へは送信しません。</p>
   </aside>
 
@@ -54,6 +55,11 @@
         <option value="no">添付なし</option>
         <option value="pdf">PDF あり</option>
         <option value="pdfonly">PDF あり（xlsx なし）</option>
+      </select>
+      <select id="dupQ" aria-label="重複">
+        <option value="">重複: すべて表示</option>
+        <option value="uniq">重複は 1 件にまとめる</option>
+        <option value="only">重複しているものだけ</option>
       </select>
       <label class="chk-inline" title="主カテゴリで「書き出しから外す」にしたもの（初期設定では対象外）を一覧に出しません"><input type="checkbox" id="hideExcl"> 対象外を隠す</label>
       <button class="btn ghost small" id="resetFilter" type="button">条件を消す</button>
@@ -209,7 +215,8 @@
         <li>「ファイルを選ぶ」で 1 件ずつ、または画面へのドラッグ＆ドロップでも読み込めます。</li>
         <li>続けて別のフォルダを読み込むと一覧に追加されます。同じファイルは二重に読み込みません。</li>
         <li>壊れたファイルや .msg でないものは、左の「読めなかったファイル」に入ります。全体の読み込みは止まりません。</li>
-        <li>同じメールが別々のファイルに入っている場合、一覧に「重複」と出ます。</li>
+        <li>同じメール（Message-ID が同じ、または中身が同じ）が別々のファイルに入っている場合、一覧に「重複」と出ます。左の「すべて」はファイルの数で、その下に重複を除いた件数を出します。絞り込みの「重複」で、1 件にまとめて表示したり、重複しているものだけを見たりできます。</li>
+        <li>同じファイルを二度読み込むことはありません（フォルダの選び方が違っても、ファイル名・サイズ・更新日時が同じなら読み込み済みとして飛ばします）。</li>
       </ul>
     </section>
 
@@ -254,7 +261,8 @@
         <li><b>主カテゴリ × 副カテゴリ</b>: 件数と行・列の合計。件数が多いマスほど濃く表示します。</li>
         <li><b>月別の推移</b>: 月ごとの件数を主カテゴリ別に並べ、合計を横棒で示します。</li>
         <li><b>SS 別</b>: SS ごとの件数を主カテゴリ別に、多い順で並べます。SS 名が取れなかったメールは「（SS 不明）」にまとめます。</li>
-        <li>数字・月・SS 名をクリックすると、そのメールの一覧へ移ります。</li>
+        <li>同じメールが複数のファイルにある場合は、1 件として数えます。</li>
+        <li>数字・月・SS 名をクリックすると、そのメールの一覧へ移ります（一覧も重複を 1 件にまとめた表示になり、件数が集計と一致します）。</li>
         <li>それぞれの表の「CSV で書き出す」で、Excel に貼れる形で保存できます。</li>
       </ul>
     </section>

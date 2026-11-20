@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- メールは機密。外部への通信を一切させない -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-fAsnAdUnaoJcYZlDZ1zWp08YndMB2jBDH9Y1upNqbs0=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-0fQ4RHsdB8WI92b1xqk6CDAdGhALai8zp+1XqEBmLK0=' 'sha256-pHbdQrO+pHYtRuQPYTm35qFF+0MbH7szhsw3Wxes1Ro='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-fAsnAdUnaoJcYZlDZ1zWp08YndMB2jBDH9Y1upNqbs0=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-0fQ4RHsdB8WI92b1xqk6CDAdGhALai8zp+1XqEBmLK0=' 'sha256-9pNd8j0N/2/eIvEZLDZ7P2ubN6WTv8tTKKJea1TVvRk='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
 <title>msg メール抽出・分類</title>
 <style>
 :root {
@@ -286,6 +286,10 @@ body.with-detail .list .snip { display: none; }
 .folder-list .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-list .n { color: var(--sub); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .folder-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+/* 重複の件数 */
+.dup-note { margin: -8px 0 14px; padding: 6px 8px; background: #edf2ff; border-radius: 6px; color: #364fc7; line-height: 1.6; }
+.dup-note .link { margin-left: 4px; color: inherit; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -314,6 +318,7 @@ body.with-detail .list .snip { display: none; }
   <aside class="side">
     <h2>主カテゴリ</h2>
     <ul class="cats" id="catList"></ul>
+    <p class="note dup-note" id="dupNote" hidden></p>
     <p class="note">ファイルは端末の中で読むだけで、外部へは送信しません。</p>
   </aside>
 
@@ -334,6 +339,11 @@ body.with-detail .list .snip { display: none; }
         <option value="no">添付なし</option>
         <option value="pdf">PDF あり</option>
         <option value="pdfonly">PDF あり（xlsx なし）</option>
+      </select>
+      <select id="dupQ" aria-label="重複">
+        <option value="">重複: すべて表示</option>
+        <option value="uniq">重複は 1 件にまとめる</option>
+        <option value="only">重複しているものだけ</option>
       </select>
       <label class="chk-inline" title="主カテゴリで「書き出しから外す」にしたもの（初期設定では対象外）を一覧に出しません"><input type="checkbox" id="hideExcl"> 対象外を隠す</label>
       <button class="btn ghost small" id="resetFilter" type="button">条件を消す</button>
@@ -489,7 +499,8 @@ body.with-detail .list .snip { display: none; }
         <li>「ファイルを選ぶ」で 1 件ずつ、または画面へのドラッグ＆ドロップでも読み込めます。</li>
         <li>続けて別のフォルダを読み込むと一覧に追加されます。同じファイルは二重に読み込みません。</li>
         <li>壊れたファイルや .msg でないものは、左の「読めなかったファイル」に入ります。全体の読み込みは止まりません。</li>
-        <li>同じメールが別々のファイルに入っている場合、一覧に「重複」と出ます。</li>
+        <li>同じメール（Message-ID が同じ、または中身が同じ）が別々のファイルに入っている場合、一覧に「重複」と出ます。左の「すべて」はファイルの数で、その下に重複を除いた件数を出します。絞り込みの「重複」で、1 件にまとめて表示したり、重複しているものだけを見たりできます。</li>
+        <li>同じファイルを二度読み込むことはありません（フォルダの選び方が違っても、ファイル名・サイズ・更新日時が同じなら読み込み済みとして飛ばします）。</li>
       </ul>
     </section>
 
@@ -534,7 +545,8 @@ body.with-detail .list .snip { display: none; }
         <li><b>主カテゴリ × 副カテゴリ</b>: 件数と行・列の合計。件数が多いマスほど濃く表示します。</li>
         <li><b>月別の推移</b>: 月ごとの件数を主カテゴリ別に並べ、合計を横棒で示します。</li>
         <li><b>SS 別</b>: SS ごとの件数を主カテゴリ別に、多い順で並べます。SS 名が取れなかったメールは「（SS 不明）」にまとめます。</li>
-        <li>数字・月・SS 名をクリックすると、そのメールの一覧へ移ります。</li>
+        <li>同じメールが複数のファイルにある場合は、1 件として数えます。</li>
+        <li>数字・月・SS 名をクリックすると、そのメールの一覧へ移ります（一覧も重複を 1 件にまとめた表示になり、件数が集計と一致します）。</li>
         <li>それぞれの表の「CSV で書き出す」で、Excel に貼れる形で保存できます。</li>
       </ul>
     </section>
@@ -2288,7 +2300,7 @@ body.with-detail .list .snip { display: none; }
     mails: [],
     settings: Cls.defaults(), // { axes: { main, sub }, ssLabels }
     manual: {},               // key -> { main?, sub?, ss? }
-    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false },
+    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '' },
     mode: 'list',             // 'list' | 'summary'
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
@@ -2454,6 +2466,12 @@ body.with-detail .list .snip { display: none; }
     return rec;
   }
 
+  /**
+   * 同じファイルかどうかの目印。フォルダの場所は含めない
+   * （子フォルダを読んだ後に親フォルダを選ぶと、同じファイルでも場所の書き方が変わるため）
+   */
+  function fileId(file) { return file.name + '|' + file.size + '|' + file.lastModified; }
+
   // ---------- フォルダの選択 ----------
   // ブラウザの選択画面は 1 フォルダしか選べないため、親フォルダを選んでもらい、直下のフォルダをここで選ばせる
 
@@ -2462,7 +2480,7 @@ body.with-detail .list .snip { display: none; }
 
   /** webkitRelativePath（"親/子/孫/x.msg"）を直下のフォルダ（子）ごとにまとめる */
   function groupByFolder(items) {
-    const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
+    const known = new Set(state.mails.map((m) => fileId(m.file)));
     const map = new Map();
     for (const it of items) {
       if (!/\.msg$/i.test(it.file.name)) continue;
@@ -2471,7 +2489,7 @@ body.with-detail .list .snip { display: none; }
       if (!map.has(key)) map.set(key, { key, root: parts[0], items: [], loaded: 0 });
       const g = map.get(key);
       g.items.push(it);
-      if (known.has(it.path + '|' + it.file.size + '|' + it.file.lastModified)) g.loaded++;
+      if (known.has(fileId(it.file))) g.loaded++;
     }
     return [...map.values()].sort((a, b) => (a.key === HERE) - (b.key === HERE) || a.key.localeCompare(b.key, 'ja'));
   }
@@ -2513,8 +2531,15 @@ body.with-detail .list .snip { display: none; }
 
   async function addFiles(items) {
     if (state.loading) return;
-    const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
-    const todo = items.filter((it) => /\.msg$/i.test(it.file.name) && !known.has(it.path + '|' + it.file.size + '|' + it.file.lastModified));
+    const known = new Set(state.mails.map((m) => fileId(m.file)));
+    const todo = [];
+    for (const it of items) {
+      if (!/\.msg$/i.test(it.file.name)) continue;
+      const id = fileId(it.file);
+      if (known.has(id)) continue;
+      known.add(id); // 同じ回の中で同じファイルが 2 回来た場合も 1 回だけ読む
+      todo.push(it);
+    }
     const skipped = items.length - todo.length;
     if (!todo.length) {
       showProgress(`読み込む .msg がありません${skipped ? `（${skipped} 件は .msg 以外か読み込み済み）` : ''}`, 1, true);
@@ -2624,7 +2649,7 @@ body.with-detail .list .snip { display: none; }
     const fq = Cls.norm(f.from);
     const dFrom = f.dateFrom ? new Date(f.dateFrom + 'T00:00:00').getTime() : null;
     const dTo = f.dateTo ? new Date(f.dateTo + 'T23:59:59.999').getTime() : null;
-    return state.mails.filter((m) => {
+    const list = state.mails.filter((m) => {
       if (f.cat === 'error') { if (!m.error) return false; }
       else if (f.cat === 'none') { if (m.cls.main.categoryId || m.error) return false; } // 読めなかったファイルは未分類に入れない
       else if (f.cat !== 'all' && m.cls.main.categoryId !== f.cat) return false;
@@ -2632,6 +2657,7 @@ body.with-detail .list .snip { display: none; }
       else if (f.sub && m.cls.sub.categoryId !== f.sub) return false;
       if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss) return false; }
       if (f.hideExcl && isExcluded(m)) return false;
+      if (f.dup === 'only' && !m.dup) return false;
       if (q.length) { const s = searchText(m); if (!q.every((w) => s.includes(w))) return false; }
       if (fq && !Cls.norm(m.from.name + ' ' + m.from.email).includes(fq)) return false;
       if (dFrom != null || dTo != null) {
@@ -2649,6 +2675,13 @@ body.with-detail .list .snip { display: none; }
       }
       return true;
     });
+    return f.dup === 'uniq' ? uniqueByKey(list) : list;
+  }
+
+  /** 同じメール（Message-ID か内容が同じ）は最初の 1 件だけ残す */
+  function uniqueByKey(list) {
+    const seen = new Set();
+    return list.filter((m) => { if (seen.has(m.key)) return false; seen.add(m.key); return true; });
   }
 
   function computeView() {
@@ -2730,6 +2763,14 @@ body.with-detail .list .snip { display: none; }
       ul.appendChild(li);
     };
     item('all', 'すべて', state.mails.length, null, 'all');
+    const uniq = new Set(state.mails.map((m) => m.key)).size;
+    const dupNote = $('dupNote');
+    clear(dupNote);
+    dupNote.hidden = uniq === state.mails.length;
+    if (!dupNote.hidden) {
+      dupNote.append(`重複を除くと ${uniq} 件（同じメールのファイルが ${state.mails.length - uniq} 件多くあります）`,
+        el('button', { type: 'button', class: 'link' }, '重複を見る'));
+    }
     for (const c of axis('main').categories) item(c.id, c.name, counts.get(c.id) || 0, c.color, c.exclude ? 'excluded' : '');
     item('none', '未分類', none, '#ced4da');
     if (err) item('error', '読めなかったファイル', err, '#e03131', 'err');
@@ -3216,15 +3257,17 @@ body.with-detail .list .snip { display: none; }
 
   // ---------- 集計 ----------
 
+  /** 集計の対象。重複は 1 件として数える */
   function summaryRows() {
-    const rows = filteredMails(true).filter((m) => !m.error);
+    const rows = uniqueByKey(filteredMails(true).filter((m) => !m.error));
     return state.sumIncExcluded ? rows : rows.filter((m) => !isExcluded(m));
   }
   const keyName = (id, a) => (id === NONE ? '未分類' : (catById(id, a) || { name: '?' }).name);
 
   /** 集計からの移動: 今の絞り込みを残したまま、クリックした条件を足して一覧へ（件数が集計と一致する） */
   function drill(patch) {
-    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded });
+    // 集計と同じ数え方にそろえる（対象外の扱い・重複を 1 件にまとめる）
+    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded, dup: state.filter.dup === 'only' ? 'only' : 'uniq' });
     state.mode = 'list';
     state.page = 0;
     syncFilterInputs();
@@ -3232,6 +3275,7 @@ body.with-detail .list .snip { display: none; }
   }
   function syncFilterInputs() {
     $('hideExcl').checked = state.filter.hideExcl;
+    $('dupQ').value = state.filter.dup;
     $('q').value = state.filter.q; $('fromQ').value = state.filter.from;
     $('dateFrom').value = state.filter.dateFrom; $('dateTo').value = state.filter.dateTo; $('attQ').value = state.filter.att;
   }
@@ -3254,10 +3298,12 @@ body.with-detail .list .snip { display: none; }
     const rows = summaryRows();
     const mainCats = axis('main').categories.filter((c) => state.sumIncExcluded || !c.exclude);
     const subCats = axis('sub').categories;
-    const excludedN = filteredMails(true).filter((m) => !m.error && isExcluded(m)).length;
+    const excludedN = uniqueByKey(filteredMails(true).filter((m) => !m.error && isExcluded(m))).length;
+    const dupN = filteredMails(true).filter((m) => !m.error && (state.sumIncExcluded || !isExcluded(m))).length - rows.length;
 
     box.appendChild(el('div', { class: 'sum-head' }, [
-      el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。']),
+      el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。',
+        dupN > 0 ? el('span', { class: 'note', text: `（同じメールが複数のファイルにある ${dupN} 件は、1 件として数えています）` }) : null]),
       el('label', null, [el('input', { type: 'checkbox', checked: state.sumIncExcluded, onchange: (ev) => { state.sumIncExcluded = ev.target.checked; render(); } }),
         `「書き出しから外す」カテゴリも含める（${excludedN} 件）`])
     ]));
@@ -3424,9 +3470,15 @@ body.with-detail .list .snip { display: none; }
     $('attQ').addEventListener('change', setFilter('att'));
     $('subQ').addEventListener('change', setFilter('sub'));
     $('hideExcl').addEventListener('change', (ev) => { state.filter.hideExcl = ev.target.checked; state.page = 0; render(); });
+    $('dupQ').addEventListener('change', setFilter('dup'));
+    $('dupNote').addEventListener('click', (ev) => {
+      if (!ev.target.closest('button')) return;
+      state.filter.dup = 'only'; state.filter.cat = 'all'; state.mode = 'list'; state.page = 0;
+      syncFilterInputs(); render();
+    });
     $('ssQ').addEventListener('change', setFilter('ss'));
     $('resetFilter').addEventListener('click', () => {
-      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false };
+      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '' };
       syncFilterInputs();
       state.page = 0; render();
     });

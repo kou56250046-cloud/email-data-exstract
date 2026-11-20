@@ -21,7 +21,7 @@
     mails: [],
     settings: Cls.defaults(), // { axes: { main, sub }, ssLabels }
     manual: {},               // key -> { main?, sub?, ss? }
-    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false },
+    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '' },
     mode: 'list',             // 'list' | 'summary'
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
@@ -187,6 +187,12 @@
     return rec;
   }
 
+  /**
+   * 同じファイルかどうかの目印。フォルダの場所は含めない
+   * （子フォルダを読んだ後に親フォルダを選ぶと、同じファイルでも場所の書き方が変わるため）
+   */
+  function fileId(file) { return file.name + '|' + file.size + '|' + file.lastModified; }
+
   // ---------- フォルダの選択 ----------
   // ブラウザの選択画面は 1 フォルダしか選べないため、親フォルダを選んでもらい、直下のフォルダをここで選ばせる
 
@@ -195,7 +201,7 @@
 
   /** webkitRelativePath（"親/子/孫/x.msg"）を直下のフォルダ（子）ごとにまとめる */
   function groupByFolder(items) {
-    const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
+    const known = new Set(state.mails.map((m) => fileId(m.file)));
     const map = new Map();
     for (const it of items) {
       if (!/\.msg$/i.test(it.file.name)) continue;
@@ -204,7 +210,7 @@
       if (!map.has(key)) map.set(key, { key, root: parts[0], items: [], loaded: 0 });
       const g = map.get(key);
       g.items.push(it);
-      if (known.has(it.path + '|' + it.file.size + '|' + it.file.lastModified)) g.loaded++;
+      if (known.has(fileId(it.file))) g.loaded++;
     }
     return [...map.values()].sort((a, b) => (a.key === HERE) - (b.key === HERE) || a.key.localeCompare(b.key, 'ja'));
   }
@@ -246,8 +252,15 @@
 
   async function addFiles(items) {
     if (state.loading) return;
-    const known = new Set(state.mails.map((m) => m.path + '|' + m.size + '|' + m.file.lastModified));
-    const todo = items.filter((it) => /\.msg$/i.test(it.file.name) && !known.has(it.path + '|' + it.file.size + '|' + it.file.lastModified));
+    const known = new Set(state.mails.map((m) => fileId(m.file)));
+    const todo = [];
+    for (const it of items) {
+      if (!/\.msg$/i.test(it.file.name)) continue;
+      const id = fileId(it.file);
+      if (known.has(id)) continue;
+      known.add(id); // 同じ回の中で同じファイルが 2 回来た場合も 1 回だけ読む
+      todo.push(it);
+    }
     const skipped = items.length - todo.length;
     if (!todo.length) {
       showProgress(`読み込む .msg がありません${skipped ? `（${skipped} 件は .msg 以外か読み込み済み）` : ''}`, 1, true);
@@ -357,7 +370,7 @@
     const fq = Cls.norm(f.from);
     const dFrom = f.dateFrom ? new Date(f.dateFrom + 'T00:00:00').getTime() : null;
     const dTo = f.dateTo ? new Date(f.dateTo + 'T23:59:59.999').getTime() : null;
-    return state.mails.filter((m) => {
+    const list = state.mails.filter((m) => {
       if (f.cat === 'error') { if (!m.error) return false; }
       else if (f.cat === 'none') { if (m.cls.main.categoryId || m.error) return false; } // 読めなかったファイルは未分類に入れない
       else if (f.cat !== 'all' && m.cls.main.categoryId !== f.cat) return false;
@@ -365,6 +378,7 @@
       else if (f.sub && m.cls.sub.categoryId !== f.sub) return false;
       if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss) return false; }
       if (f.hideExcl && isExcluded(m)) return false;
+      if (f.dup === 'only' && !m.dup) return false;
       if (q.length) { const s = searchText(m); if (!q.every((w) => s.includes(w))) return false; }
       if (fq && !Cls.norm(m.from.name + ' ' + m.from.email).includes(fq)) return false;
       if (dFrom != null || dTo != null) {
@@ -382,6 +396,13 @@
       }
       return true;
     });
+    return f.dup === 'uniq' ? uniqueByKey(list) : list;
+  }
+
+  /** 同じメール（Message-ID か内容が同じ）は最初の 1 件だけ残す */
+  function uniqueByKey(list) {
+    const seen = new Set();
+    return list.filter((m) => { if (seen.has(m.key)) return false; seen.add(m.key); return true; });
   }
 
   function computeView() {
@@ -463,6 +484,14 @@
       ul.appendChild(li);
     };
     item('all', 'すべて', state.mails.length, null, 'all');
+    const uniq = new Set(state.mails.map((m) => m.key)).size;
+    const dupNote = $('dupNote');
+    clear(dupNote);
+    dupNote.hidden = uniq === state.mails.length;
+    if (!dupNote.hidden) {
+      dupNote.append(`重複を除くと ${uniq} 件（同じメールのファイルが ${state.mails.length - uniq} 件多くあります）`,
+        el('button', { type: 'button', class: 'link' }, '重複を見る'));
+    }
     for (const c of axis('main').categories) item(c.id, c.name, counts.get(c.id) || 0, c.color, c.exclude ? 'excluded' : '');
     item('none', '未分類', none, '#ced4da');
     if (err) item('error', '読めなかったファイル', err, '#e03131', 'err');
@@ -949,15 +978,17 @@
 
   // ---------- 集計 ----------
 
+  /** 集計の対象。重複は 1 件として数える */
   function summaryRows() {
-    const rows = filteredMails(true).filter((m) => !m.error);
+    const rows = uniqueByKey(filteredMails(true).filter((m) => !m.error));
     return state.sumIncExcluded ? rows : rows.filter((m) => !isExcluded(m));
   }
   const keyName = (id, a) => (id === NONE ? '未分類' : (catById(id, a) || { name: '?' }).name);
 
   /** 集計からの移動: 今の絞り込みを残したまま、クリックした条件を足して一覧へ（件数が集計と一致する） */
   function drill(patch) {
-    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded });
+    // 集計と同じ数え方にそろえる（対象外の扱い・重複を 1 件にまとめる）
+    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded, dup: state.filter.dup === 'only' ? 'only' : 'uniq' });
     state.mode = 'list';
     state.page = 0;
     syncFilterInputs();
@@ -965,6 +996,7 @@
   }
   function syncFilterInputs() {
     $('hideExcl').checked = state.filter.hideExcl;
+    $('dupQ').value = state.filter.dup;
     $('q').value = state.filter.q; $('fromQ').value = state.filter.from;
     $('dateFrom').value = state.filter.dateFrom; $('dateTo').value = state.filter.dateTo; $('attQ').value = state.filter.att;
   }
@@ -987,10 +1019,12 @@
     const rows = summaryRows();
     const mainCats = axis('main').categories.filter((c) => state.sumIncExcluded || !c.exclude);
     const subCats = axis('sub').categories;
-    const excludedN = filteredMails(true).filter((m) => !m.error && isExcluded(m)).length;
+    const excludedN = uniqueByKey(filteredMails(true).filter((m) => !m.error && isExcluded(m))).length;
+    const dupN = filteredMails(true).filter((m) => !m.error && (state.sumIncExcluded || !isExcluded(m))).length - rows.length;
 
     box.appendChild(el('div', { class: 'sum-head' }, [
-      el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。']),
+      el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。',
+        dupN > 0 ? el('span', { class: 'note', text: `（同じメールが複数のファイルにある ${dupN} 件は、1 件として数えています）` }) : null]),
       el('label', null, [el('input', { type: 'checkbox', checked: state.sumIncExcluded, onchange: (ev) => { state.sumIncExcluded = ev.target.checked; render(); } }),
         `「書き出しから外す」カテゴリも含める（${excludedN} 件）`])
     ]));
@@ -1157,9 +1191,15 @@
     $('attQ').addEventListener('change', setFilter('att'));
     $('subQ').addEventListener('change', setFilter('sub'));
     $('hideExcl').addEventListener('change', (ev) => { state.filter.hideExcl = ev.target.checked; state.page = 0; render(); });
+    $('dupQ').addEventListener('change', setFilter('dup'));
+    $('dupNote').addEventListener('click', (ev) => {
+      if (!ev.target.closest('button')) return;
+      state.filter.dup = 'only'; state.filter.cat = 'all'; state.mode = 'list'; state.page = 0;
+      syncFilterInputs(); render();
+    });
     $('ssQ').addEventListener('change', setFilter('ss'));
     $('resetFilter').addEventListener('click', () => {
-      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false };
+      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '' };
       syncFilterInputs();
       state.page = 0; render();
     });

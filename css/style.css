@@ -276,3 +276,7 @@ body.with-detail .list .snip { display: none; }
 .folder-list .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-list .n { color: var(--sub); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .folder-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+/* 重複の件数 */
+.dup-note { margin: -8px 0 14px; padding: 6px 8px; background: #edf2ff; border-radius: 6px; color: #364fc7; line-height: 1.6; }
+.dup-note .link { margin-left: 4px; color: inherit; font-weight: bold; }

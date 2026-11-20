@@ -22,6 +22,8 @@
   function attNames(m) {
     return (m.attachments || []).filter(function (a) { return !a.hidden; }).map(function (a) { return a.name; }).join('; ');
   }
+  function isPdf(a) { return /\.pdf$/i.test(a.name || '') || /application\/pdf/i.test(a.mime || ''); }
+  function pdfNames(m) { return (m.attachments || []).filter(isPdf).map(function (a) { return a.name; }).join('; '); }
   var IMP = { 0: '低', 1: '普通', 2: '高' };
 
   function csvCell(v) {
@@ -33,8 +35,10 @@
   }
 
   var COLS = [
-    ['カテゴリ', function (m, c) { return c(m); }],
-    ['分類方法', function (m, c, b) { return b(m); }],
+    ['主カテゴリ', function (m, info) { return info.main(m); }],
+    ['副カテゴリ', function (m, info) { return info.sub(m); }],
+    ['SS名', function (m, info) { return info.ss(m); }],
+    ['分類方法', function (m, info) { return info.by(m); }],
     ['送信日時', function (m) { return fmtDate(m.sentAt); }],
     ['受信日時', function (m) { return fmtDate(m.receivedAt); }],
     ['送信者名', function (m) { return m.from ? m.from.name : ''; }],
@@ -45,6 +49,7 @@
     ['件名', function (m) { return m.subject; }],
     ['本文', function (m) { return m.bodyText; }],
     ['添付ファイル名', attNames],
+    ['添付PDF', pdfNames],
     ['添付xlsxの内容', function (m) { return m.xlsxText || ''; }],
     ['添付数', function (m) { return (m.attachments || []).filter(function (a) { return !a.hidden; }).length; }],
     ['重要度', function (m) { return IMP[m.importance] || ''; }],
@@ -54,21 +59,24 @@
     ['エラー', function (m) { return m.error || ''; }]
   ];
 
-  function toCsv(rows, catName, byName) {
+  /**
+   * info: { main(m), sub(m), ss(m), by(m) } それぞれ表示用の文字列を返す
+   */
+  function toCsv(rows, info) {
     var lines = [COLS.map(function (c) { return csvCell(c[0]); }).join(',')];
     rows.forEach(function (m) {
-      lines.push(COLS.map(function (c) { return csvCell(c[1](m, catName, byName)); }).join(','));
+      lines.push(COLS.map(function (c) { return csvCell(c[1](m, info)); }).join(','));
     });
     return '﻿' + lines.join('\r\n') + '\r\n';
   }
 
-  function toJson(rows, catName) {
+  function toJson(rows, info) {
     return JSON.stringify({
       exportedAt: new Date().toISOString(),
       count: rows.length,
       mails: rows.map(function (m) {
         return {
-          category: catName(m), file: m.path || m.fileName, error: m.error || null,
+          mainCategory: info.main(m), subCategory: info.sub(m), ss: info.ss(m) || null, file: m.path || m.fileName, error: m.error || null,
           subject: m.subject, from: m.from, to: m.to, cc: m.cc, bcc: m.bcc,
           sentAt: m.sentAt, receivedAt: m.receivedAt, importance: m.importance,
           messageId: m.messageId, inReplyTo: m.inReplyTo, references: m.references,
@@ -88,11 +96,11 @@
     });
   }
 
-  /** カテゴリ別の目次つき 1 ファイル。本文はテキストで入れる（外部画像やスクリプトを持ち込まない） */
-  function toHtml(rows, catName, catOrder) {
+  /** 主カテゴリ別の目次つき 1 ファイル。本文はテキストで入れる（外部画像やスクリプトを持ち込まない） */
+  function toHtml(rows, info, catOrder) {
     var groups = {};
     rows.forEach(function (m) {
-      var c = catName(m) || '未分類';
+      var c = info.main(m) || '未分類';
       (groups[c] = groups[c] || []).push(m);
     });
     var names = Object.keys(groups).sort(function (a, b) {
@@ -120,6 +128,8 @@
       groups[n].forEach(function (m) {
         h.push('<article><h3>' + esc(m.subject || '（件名なし）') + '</h3><table>');
         var row = function (k, v) { if (v) h.push('<tr><th>' + k + '</th><td>' + esc(v) + '</td></tr>'); };
+        row('副カテゴリ', info.sub(m));
+        row('SS', info.ss(m));
         row('送信者', m.from ? addr(m.from) : '');
         row('送信日時', fmtDate(m.sentAt));
         row('受信日時', fmtDate(m.receivedAt));
@@ -136,7 +146,7 @@
     return h.join('\n');
   }
 
-  var api = { toCsv: toCsv, toJson: toJson, toHtml: toHtml, fmtDate: fmtDate, addrs: addrs, addr: addr, esc: esc };
+  var api = { isPdf: isPdf, toCsv: toCsv, toJson: toJson, toHtml: toHtml, fmtDate: fmtDate, addrs: addrs, addr: addr, esc: esc };
   g.MsgExport = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

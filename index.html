@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- メールは機密。外部への通信を一切させない -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-F/wxxnxCmj4zSy2LiBrcmIpJ/w6YBevf1Lk0trj/gYA=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-MiA1nhmzeTWmnEJDGNx1f5QI4ZkXKxw8SbJCVn8w3ns=' 'sha256-BLInDyXnOiXRcpjsGDTVFjYr19p5zlzi5O7Z/A3E9HE='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-fAsnAdUnaoJcYZlDZ1zWp08YndMB2jBDH9Y1upNqbs0=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-0fQ4RHsdB8WI92b1xqk6CDAdGhALai8zp+1XqEBmLK0=' 'sha256-T+RHAlIbZFpS7etrAsyEintp166498AViIn7QSMxAak='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
 <title>msg メール抽出・分類</title>
 <style>
 :root {
@@ -222,6 +222,61 @@ body.with-detail .list .snip { display: none; }
 .help-table thead th { background: #f1f3f5; color: var(--sub); font-weight: normal; white-space: nowrap; }
 .help-table tbody th { white-space: nowrap; background: #fff8f0; }
 .help-table td:nth-child(3) { background: #f4fbf6; }
+
+/* 一覧 / 集計の切り替え、設定のタブ */
+.viewtabs, .stabs { display: flex; gap: 2px; padding: 8px 14px 0; background: var(--panel); }
+.stabs { padding: 0 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.vtab { font: inherit; padding: 6px 16px; border: 1px solid var(--line); border-bottom: 0; background: #f1f3f5; color: var(--sub); border-radius: 6px 6px 0 0; cursor: pointer; }
+.stabs .vtab { border-bottom: 1px solid var(--line); border-radius: 6px; }
+.vtab.on { background: var(--panel); color: var(--ink); font-weight: bold; box-shadow: inset 0 3px 0 var(--accent); }
+.vtab:focus-visible { outline: 2px solid var(--accent); }
+.filters select { max-width: 180px; }
+
+/* 一覧の 2 軸 */
+.list .cat { width: 170px; }
+.list .catstack { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.chip.sub { font-size: 11px; padding: 1px 7px 1px 5px; background: #fff; border: 1px solid color-mix(in srgb, var(--c, #adb5bd) 45%, white); }
+.chip.none.sub { border-color: var(--line); }
+.list .ss { font-size: 11.5px; color: var(--sub); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .ss::before { content: "SS "; color: #adb5bd; }
+.list .att .xl.pdf { background: #fff4e6; color: #d9480f; }
+
+/* 詳細の 2 軸 */
+.detail-head .sp { flex: 1; }
+.detail-cls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: #fcfcfd; }
+.detail-cls select, .detail-cls input { min-width: 0; width: 100%; }
+.why .ax { display: inline-block; width: 2.2em; color: var(--sub); font-size: 11px; }
+.pdfview { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: var(--radius); margin: 6px 0; background: #525659; }
+.wide-input { width: 100%; }
+
+/* 集計 */
+.summary { flex: 1; overflow: auto; padding: 14px 18px 40px; }
+.summary[hidden] { display: none; }
+.sum-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+.sum-head p { margin: 0; }
+.sum-head label { font-size: 12.5px; color: var(--sub); }
+.sum-sec { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 14px 0; }
+.sum-sec-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sum-sec-head h3 { margin: 0; }
+.sum-wrap { overflow: auto; max-height: 520px; }
+.sum-table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+.sum-table th, .sum-table td { border: 1px solid var(--line); padding: 5px 8px; }
+.sum-table thead th { position: sticky; top: 0; background: #f1f3f5; color: var(--sub); font-weight: normal; z-index: 1; }
+.sum-table .colh { min-width: 64px; font-size: 12px; }
+.sum-table .rowh { text-align: left; white-space: nowrap; font-weight: normal; background: #fafbfc; position: sticky; left: 0; }
+.sum-table .corner { position: sticky; left: 0; z-index: 2; }
+.sum-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sum-table .tot { font-weight: bold; background: #f8f9fa; }
+.sum-table .foot th { background: #f1f3f5; text-align: left; }
+.sum-table .zero { color: #ced4da; }
+.sum-table .barh { width: 160px; }
+.sum-table .barc { width: 160px; }
+.sum-table .bar { height: 10px; background: #f1f3f5; border-radius: 5px; overflow: hidden; }
+.sum-table .bar span { display: block; height: 100%; background: var(--accent); }
+.link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px; }
+.link:hover { text-decoration-color: currentColor; }
+.link.num { font-variant-numeric: tabular-nums; }
+.link.muted { color: var(--sub); }
 </style>
 </head>
 <body>
@@ -248,29 +303,42 @@ body.with-detail .list .snip { display: none; }
 
 <div class="layout">
   <aside class="side">
-    <h2>カテゴリ</h2>
+    <h2>主カテゴリ</h2>
     <ul class="cats" id="catList"></ul>
     <p class="note">ファイルは端末の中で読むだけで、外部へは送信しません。</p>
   </aside>
 
   <main class="main">
+    <div class="viewtabs" role="tablist" aria-label="表示の切り替え">
+      <button class="vtab on" id="tabList" type="button" role="tab" aria-selected="true">一覧</button>
+      <button class="vtab" id="tabSummary" type="button" role="tab" aria-selected="false">集計</button>
+    </div>
     <div class="filters">
       <input type="search" id="q" placeholder="件名・本文・送信者・添付名で検索" aria-label="検索">
+      <select id="subQ" aria-label="副カテゴリで絞り込み"></select>
+      <select id="ssQ" aria-label="SS で絞り込み"></select>
       <input type="search" id="fromQ" placeholder="送信者" aria-label="送信者で絞り込み">
       <label>期間 <input type="date" id="dateFrom" aria-label="開始日"> 〜 <input type="date" id="dateTo" aria-label="終了日"></label>
       <select id="attQ" aria-label="添付">
         <option value="">添付: すべて</option>
         <option value="yes">添付あり</option>
         <option value="no">添付なし</option>
+        <option value="pdf">PDF あり</option>
+        <option value="pdfonly">PDF あり（xlsx なし）</option>
       </select>
+      <label class="chk-inline" title="主カテゴリで「書き出しから外す」にしたもの（初期設定では対象外）を一覧に出しません"><input type="checkbox" id="hideExcl"> 対象外を隠す</label>
       <button class="btn ghost small" id="resetFilter" type="button">条件を消す</button>
     </div>
 
     <div class="bulk" id="bulk" hidden>
       <span id="selCount"></span>
+      <select id="bulkAxis" aria-label="変える軸">
+        <option value="main">主カテゴリを</option>
+        <option value="sub">副カテゴリを</option>
+      </select>
       <select id="bulkCat" aria-label="付けるカテゴリ"></select>
       <button class="btn small primary" id="bulkApply" type="button">にする</button>
-      <button class="btn small" id="bulkAuto" type="button">自動分類に戻す</button>
+      <button class="btn small" id="bulkAuto" type="button">この軸を自動分類に戻す</button>
       <button class="btn small ghost" id="bulkClear" type="button">選択を解除</button>
     </div>
 
@@ -296,14 +364,21 @@ body.with-detail .list .snip { display: none; }
       </table>
       <div class="pager" id="pager"></div>
     </div>
+
+    <div class="summary" id="summary" hidden></div>
   </main>
 
   <section class="detail" id="detail" hidden aria-label="メールの詳細">
     <div class="detail-head">
       <button class="btn small ghost" id="prevMail" type="button" title="前のメール (k)">↑</button>
       <button class="btn small ghost" id="nextMail" type="button" title="次のメール (j)">↓</button>
-      <select id="detailCat" aria-label="このメールのカテゴリ"></select>
+      <span class="sp"></span>
       <button class="btn small ghost close" id="closeDetail" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div class="detail-cls">
+      <select id="detailCat" aria-label="このメールの主カテゴリ"></select>
+      <select id="detailSub" aria-label="このメールの副カテゴリ"></select>
+      <input type="text" id="detailSs" aria-label="このメールの SS 名" placeholder="SS 名">
     </div>
     <div class="detail-body" id="detailBody"></div>
   </section>
@@ -312,22 +387,33 @@ body.with-detail .list .snip { display: none; }
 <dialog id="settings" class="dlg wide">
   <form method="dialog" class="dlg-head"><h2>分類の設定</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
   <div class="dlg-body">
-    <section>
+    <div class="stabs" role="tablist" aria-label="設定の種類">
+      <button class="vtab on" type="button" role="tab" data-stab="main">主カテゴリ（業務の段階）</button>
+      <button class="vtab" type="button" role="tab" data-stab="sub">副カテゴリ（設備・工種）</button>
+      <button class="vtab" type="button" role="tab" data-stab="ss">SS 名の取り出し</button>
+    </div>
+    <section id="secCats">
       <h3>カテゴリ</h3>
-      <p class="note">「書き出しから外す」にしたカテゴリは、書き出し時に既定で除外されます。</p>
+      <p class="note" id="catHelp"></p>
       <ul class="catedit" id="catEdit"></ul>
       <button class="btn small" id="addCat" type="button">＋ カテゴリを追加</button>
     </section>
-    <section>
+    <section id="secRules">
       <h3>自動分類のルール</h3>
       <p class="note">上から順に調べ、最初に当てはまったルールのカテゴリを付けます。1つのルールに条件を複数入れると「すべて満たす」になります。手で付けたカテゴリはルールより優先されます。</p>
       <ol class="rules" id="ruleEdit"></ol>
       <button class="btn small" id="addRule" type="button">＋ ルールを追加</button>
     </section>
-    <section>
+    <section id="secDomains">
       <h3>よく来る送信者ドメイン</h3>
       <p class="note">未分類のメールが多い順です。カテゴリを選ぶとドメインのルールを追加します。</p>
       <table class="domains"><tbody id="domainList"></tbody></table>
+    </section>
+    <section id="secSs" hidden>
+      <h3>SS 名の取り出し</h3>
+      <p class="note">添付 xlsx で、次の見出しの右隣のセルを SS 名として使います（<code>,</code> 区切り。上にあるものから順に探します）。見つからなければ、件名・本文の「○○SS」「○○給油所」の形から取ります。取れないメールは詳細画面で入力できます。</p>
+      <input type="text" id="ssLabels" class="wide-input" aria-label="SS 名の見出し語">
+      <p class="note" id="ssStat"></p>
     </section>
     <section>
       <h3>設定の保存・移行</h3>
@@ -366,10 +452,11 @@ body.with-detail .list .snip { display: none; }
       <a href="#h-load">1. 読み込む</a>
       <a href="#h-view">2. 見る・探す</a>
       <a href="#h-class">3. 分類する</a>
-      <a href="#h-export">4. 書き出す</a>
-      <a href="#h-ai">5. AI に渡すとき</a>
-      <a href="#h-data">6. データの扱い</a>
-      <a href="#h-trouble">7. うまくいかないとき</a>
+      <a href="#h-sum">4. 集計する</a>
+      <a href="#h-export">5. 書き出す</a>
+      <a href="#h-ai">6. AI に渡すとき</a>
+      <a href="#h-data">7. データの扱い</a>
+      <a href="#h-trouble">8. うまくいかないとき</a>
     </nav>
 
     <section id="h-load">
@@ -388,29 +475,49 @@ body.with-detail .list .snip { display: none; }
       <ul>
         <li>一覧の行をクリックすると、右側に詳細が開きます。<kbd>↑</kbd><kbd>↓</kbd>（または <kbd>k</kbd><kbd>j</kbd>）で前後のメールへ移れ、<kbd>Esc</kbd> で閉じます。</li>
         <li>詳細では、宛先（To / Cc / Bcc）・送受信日時・本文・添付を確認できます。本文は「見たまま（HTML）」と「テキスト」を切り替えられます。</li>
-        <li>添付の <b>xlsx</b> は「表を見る」で中身を表示できます。<b>画像</b>は縮小表示され、クリックで拡大します。どの添付も「保存」で取り出せます。</li>
+        <li>添付の <b>xlsx</b> は「表を見る」で中身を表示できます。<b>PDF</b> は「PDF を表示」で中身を見られます（表示されない場合は「新しいタブで開く」）。<b>画像</b>は縮小表示され、クリックで拡大します。どの添付も「保存」で取り出せます。</li>
         <li>転送されたメール（メールの中のメール）は、「添付メール」を開くと中身まで見られます。</li>
         <li>上の検索欄は、件名・本文・送信者・宛先・添付ファイル名・<b>添付 xlsx の中身</b>をまとめて探します。空白で区切ると「すべてを含む」で絞り込みます。全角と半角、大文字と小文字の違いは区別しません。</li>
-        <li>送信者・期間・添付の有無でも絞り込めます。一覧の「日時」「送信者」「件名」をクリックすると並べ替えます。</li>
+        <li>副カテゴリ・SS・送信者・期間・添付の有無でも絞り込めます。添付の「PDF あり（xlsx なし）」は、FAX の PDF しか付いていないメール（文字を読めないので手で分類が必要なもの）をまとめて探すときに使います。</li>
+        <li>一覧の「日時」「送信者」「件名」をクリックすると並べ替えます。</li>
       </ul>
     </section>
 
     <section id="h-class">
       <h3>3. 分類する</h3>
+      <p>1 通のメールに、次の 2 つのカテゴリと SS 名が付きます。</p>
       <ul>
-        <li>読み込むと、「分類の設定」のルールに従って自動で分類されます。ルールは上から順に調べ、最初に当てはまったものが使われます。</li>
-        <li>はじめは「対象外（パスワード・自動通知）」「補修依頼」「見積・請求」「完了報告」「その他」が入っています。名前・色・並び順は自由に変えられます。</li>
+        <li><b>主カテゴリ（業務の段階）</b>: 対象外（パスワード・自動通知）/ 補修依頼 / 見積 / 発注 / 完了報告 / 請求 / その他</li>
+        <li><b>副カテゴリ（設備・工種）</b>: 計量機 / 洗車機 / 看板・照明 / POS・電気 / タンク・配管 / 空調・コンプレッサー / 建物・舗装 / その他設備。件名・本文に加えて添付 xlsx の中身（「対象設備」欄など）も見て決めます</li>
+        <li><b>SS 名</b>: 添付 xlsx の「SS名」欄の値。無ければ件名・本文の「○○SS」「○○給油所」から取ります</li>
+      </ul>
+      <ul>
+        <li>読み込むと、「分類の設定」のルールに従って軸ごとに自動で分類されます。ルールは上から順に調べ、最初に当てはまったものが使われます。</li>
+        <li>カテゴリの名前・色・並び順・ルールは、「分類の設定」の上のタブ（主カテゴリ / 副カテゴリ / SS 名の取り出し）で軸ごとに変えられます。</li>
         <li>「補修依頼」「修理依頼」のように言い方が違う場合は、ルールの語を <code>,</code> で区切って並べます（例: <code>補修, 修理, 修繕</code>）。どれか 1 つでも含まれれば当てはまります。</li>
         <li>詳細画面に「どの語で分類されたか」が出ます。間違って分類されていたら、その語をルールから外すか、より上に別のルールを置いてください。</li>
-        <li><b>1 件だけ直す</b>: 詳細画面の上にあるカテゴリ欄で選び直します。「自動分類」を選ぶとルールによる分類に戻ります。</li>
-        <li><b>まとめて直す</b>: 一覧のチェックボックスで選び、上に出る欄でカテゴリを選んで「にする」を押します。</li>
+        <li><b>1 件だけ直す</b>: 詳細画面の上にある主・副の欄で選び直します。「自動」を選ぶとルールによる分類に戻ります。SS 名は右の欄に入力します（空にすると自動に戻ります）。</li>
+        <li><b>まとめて直す</b>: 一覧のチェックボックスで選び、上に出る欄で「主カテゴリを / 副カテゴリを」とカテゴリを選んで「にする」を押します。</li>
+        <li>FAX の PDF しか付いていないメールは中身の文字を読めないため、件名・本文だけで分類されます。添付の絞り込みで「PDF あり（xlsx なし）」を選び、PDF を見ながら手で直してください。</li>
         <li>手で付けたカテゴリには「手」の印が付き、ルールより優先されます。</li>
         <li>「分類の設定」の「よく来る送信者ドメイン」から、送信元の会社ごとのルールを簡単に作れます。</li>
       </ul>
     </section>
 
+    <section id="h-sum">
+      <h3>4. 集計する</h3>
+      <ul>
+        <li>一覧の上の「集計」タブで切り替えます。左の主カテゴリ・上の絞り込み条件（期間・SS など）がそのままかかります。「書き出しから外す」カテゴリ（対象外）は、チェックを入れない限り数えません。</li>
+        <li><b>主カテゴリ × 副カテゴリ</b>: 件数と行・列の合計。件数が多いマスほど濃く表示します。</li>
+        <li><b>月別の推移</b>: 月ごとの件数を主カテゴリ別に並べ、合計を横棒で示します。</li>
+        <li><b>SS 別</b>: SS ごとの件数を主カテゴリ別に、多い順で並べます。SS 名が取れなかったメールは「（SS 不明）」にまとめます。</li>
+        <li>数字・月・SS 名をクリックすると、そのメールの一覧へ移ります。</li>
+        <li>それぞれの表の「CSV で書き出す」で、Excel に貼れる形で保存できます。</li>
+      </ul>
+    </section>
+
     <section id="h-export">
-      <h3>4. 書き出す</h3>
+      <h3>5. 書き出す</h3>
       <p>「書き出し」から、対象（絞り込み中 / 選択中 / すべて）と形式を選びます。「書き出しから外す」にしたカテゴリ（初期設定では「対象外」）は、チェックを入れない限り含まれません。</p>
       <div class="help-table-wrap">
         <table class="help-table">
@@ -420,13 +527,13 @@ body.with-detail .list .snip { display: none; }
           <tbody>
             <tr>
               <th>CSV（Excel）</th>
-              <td>1 通 = 1 行の表。カテゴリ・分類方法・送受信日時・送信者・To / Cc / Bcc・件名・本文・添付ファイル名・添付 xlsx の内容・重要度・Message-ID・元ファイル名など 19 列。</td>
+              <td>1 通 = 1 行の表。主カテゴリ・副カテゴリ・SS名・分類方法・送受信日時・送信者・To / Cc / Bcc・件名・本文・添付ファイル名・添付PDF・添付 xlsx の内容・重要度・Message-ID・元ファイル名など 22 列。</td>
               <td>Excel で<b>並べ替え・フィルタ・集計</b>する。スタンド別・月別の件数を数える、一覧表として台帳に貼る。</td>
               <td>本文は 32,000 文字で切り詰め。<code>=</code> などで始まる値は数式にならないよう先頭に <code>'</code> を付けます。</td>
             </tr>
             <tr>
               <th>閲覧用 HTML</th>
-              <td>カテゴリ別の目次つき 1 ファイル。1 通ずつ件名・送信者・日時・宛先・添付名・本文を並べます。添付 xlsx の内容は折りたたみで表示。</td>
+              <td>主カテゴリ別の目次つき 1 ファイル。1 通ずつ件名・副カテゴリ・SS・送信者・日時・宛先・添付名・本文を並べます。添付 xlsx の内容は折りたたみで表示。</td>
               <td>ブラウザで<b>ざっと読む</b>、<b>印刷して回覧</b>する、Outlook を持たない人に共有する。</td>
               <td>集計には不向き。本文は文字だけ（画像・装飾は含みません）。</td>
             </tr>
@@ -439,11 +546,11 @@ body.with-detail .list .snip { display: none; }
           </tbody>
         </table>
       </div>
-      <p class="note">どの形式にも、添付ファイルそのもの（画像・PDF など）は含まれません。xlsx だけはセルの文字をテキストにして入れます（1 通あたり最大 5 万文字）。添付が必要なときは詳細画面から保存してください。</p>
+      <p class="note">どの形式にも、添付ファイルそのもの（画像・PDF など）は含まれません。xlsx だけはセルの文字をテキストにして入れます（1 通あたり最大 5 万文字）。FAX の PDF は画像のため文字は入りません。添付が必要なときは詳細画面から保存してください。集計表の CSV は「集計」タブから書き出します。</p>
     </section>
 
     <section id="h-ai">
-      <h3>5. AI に渡すとき</h3>
+      <h3>6. AI に渡すとき</h3>
       <ul>
         <li><b>JSON がおすすめ</b>です。項目の区切りがはっきりしていて、本文の切り詰めや文字の付け足しがありません。</li>
         <li>件数が多いと一度に渡せる量を超えます。左のカテゴリ（例: 補修依頼だけ）や期間で絞り込んでから「絞り込み中」で書き出し、何回かに分けて渡してください。</li>
@@ -453,7 +560,7 @@ body.with-detail .list .snip { display: none; }
     </section>
 
     <section id="h-data">
-      <h3>6. データの扱い</h3>
+      <h3>7. データの扱い</h3>
       <ul>
         <li>.msg ファイルはこのパソコンの中で読むだけで、<b>外部へは一切送信しません</b>。メール本文の外部画像も読み込みません。</li>
         <li>メールの中身は保存しません。画面を閉じると一覧は消えるので、次回はもう一度フォルダを読み込んでください。</li>
@@ -464,10 +571,12 @@ body.with-detail .list .snip { display: none; }
     </section>
 
     <section id="h-trouble">
-      <h3>7. うまくいかないとき</h3>
+      <h3>8. うまくいかないとき</h3>
       <ul>
         <li><b>文字化けする</b>: 「テキスト」と「見たまま（HTML）」を切り替えてみてください。それでも化ける場合は、そのメールの送信元を控えてご相談ください。</li>
         <li><b>分類がおかしい</b>: 詳細画面で「どの語で分類されたか」を確認し、「分類の設定」でその語を直します。</li>
+        <li><b>SS 名が取れない・違う</b>: 「分類の設定」→「SS 名の取り出し」で、xlsx の見出し語（例: 店舗名）を足します。個別には詳細画面の SS 欄に入力します。</li>
+        <li><b>PDF の中身で分類されない</b>: FAX の PDF は画像なので文字を読めません。手で分類してください。</li>
         <li><b>xlsx が表示されない</b>: 古い形式の <code>.xls</code>（Excel 2003 以前）は表示できません。「保存」して Excel 等で開いてください。Word・PDF の中身も表示しません。</li>
         <li><b>動作が重い</b>: 一覧を 100 件ずつ表示しています。絞り込みを使うと軽くなります。</li>
       </ul>
@@ -1570,10 +1679,12 @@ body.with-detail .list .snip { display: none; }
     return hits;
   }
 
-  /** @returns {{categoryId: string|null, by: 'manual'|'rule'|null, ruleId: string|null, hits: string[]}} */
-  function classify(mail, rules, manual) {
-    var m = manual && manual[mail.key];
-    if (m) return { categoryId: m, by: 'manual', ruleId: null, hits: [] };
+  /**
+   * 1 つの軸で分類する。manualId はその軸で手で付けたカテゴリ（無ければ null）
+   * @returns {{categoryId: string|null, by: 'manual'|'rule'|null, ruleId: string|null, hits: string[]}}
+   */
+  function classify(mail, rules, manualId) {
+    if (manualId) return { categoryId: manualId, by: 'manual', ruleId: null, hits: [] };
     for (var i = 0; i < rules.length; i++) {
       if (!rules[i].categoryId) continue;
       var hits = matchRule(mail, rules[i]);
@@ -1585,35 +1696,315 @@ body.with-detail .list .snip { display: none; }
   var seq = 0;
   function newId(prefix) { return prefix + Date.now().toString(36) + (seq++).toString(36); }
 
-  /** 初期設定: ガソリンスタンドの補修依頼が中心、パスワード通知などは対象外 */
+  var AXES = { main: '主カテゴリ（業務の段階）', sub: '副カテゴリ（設備・工種）' };
+  var SS_LABELS = ['SS名', '店舗名', '給油所名', '施設名', 'SS'];
+
+  function rule(id, cat, field, value) {
+    return { id: id, categoryId: cat, enabled: true, conditions: [{ field: field, op: 'contains', value: value }] };
+  }
+
+  // 「見積・請求」を分けた後の見積ルール（v1 の初期値と区別するため両方持つ）
+  var V1_ESTIMATE = '見積, 御見積, 請求, 精算';
+
+  /** 初期設定。主＝業務の段階、副＝設備・工種。ガソリンスタンドの補修依頼が中心 */
   function defaults() {
-    var cats = [
-      { id: 'c-exclude', name: '対象外（パスワード・自動通知）', color: '#8a8f98', exclude: true },
-      { id: 'c-repair', name: '補修依頼', color: '#d9480f', exclude: false },
-      { id: 'c-estimate', name: '見積・請求', color: '#1971c2', exclude: false },
-      { id: 'c-done', name: '完了報告', color: '#2f9e44', exclude: false },
-      { id: 'c-other', name: 'その他', color: '#7048e8', exclude: false }
+    var main = {
+      categories: [
+        { id: 'c-exclude', name: '対象外（パスワード・自動通知）', color: '#8a8f98', exclude: true },
+        { id: 'c-repair', name: '補修依頼', color: '#d9480f', exclude: false },
+        { id: 'c-estimate', name: '見積', color: '#1971c2', exclude: false },
+        { id: 'c-order', name: '発注', color: '#0c8599', exclude: false },
+        { id: 'c-done', name: '完了報告', color: '#2f9e44', exclude: false },
+        { id: 'c-invoice', name: '請求', color: '#e67700', exclude: false },
+        { id: 'c-other', name: 'その他', color: '#7048e8', exclude: false }
+      ],
+      rules: [
+        rule('r-pw', 'c-exclude', 'subject', 'パスワード, password, 認証コード, ワンタイム, ログイン, サインイン, 確認コード, verification, アカウント'),
+        rule('r-noreply', 'c-exclude', 'from', 'noreply, no-reply, donotreply, mailer-daemon, postmaster'),
+        rule('r-invoice', 'c-invoice', 'subject', '請求, 精算, 支払'),
+        rule('r-order', 'c-order', 'subject', '発注, 注文, 注文書, 発注書'),
+        rule('r-estimate', 'c-estimate', 'subject', '見積, 御見積, お見積'),
+        rule('r-done', 'c-done', 'subject', '完了, 完工, 作業報告, 報告書'),
+        rule('r-repair', 'c-repair', 'any', '補修, 修理, 修繕, 修復, 復旧, 故障, 不具合, 破損, 損傷, 異常, 不良, 点検, 交換, 取替, 取り替え, 漏れ, 漏洩, 調整, 直して, メンテ, 工事, 対応依頼, 依頼')
+      ]
+    };
+    var subDefs = [
+      ['s-dispenser', '計量機', '#d9480f', '計量機, 給油機, ノズル, 給油ホース, 表示器, 給油ポンプ'],
+      ['s-carwash', '洗車機', '#1971c2', '洗車機, 洗車'],
+      ['s-sign', '看板・照明', '#e67700', '看板, サイン, 照明, キャノピー, led照明, led灯, 蛍光灯, ポール'],
+      ['s-elec', 'POS・電気', '#7048e8', 'pos端末, posレジ, レジ, 分電盤, ブレーカー, 配線, 電気, 漏電'],
+      ['s-tank', 'タンク・配管', '#0c8599', 'タンク, 液面計, 配管, 漏洩, 油水分離, 地下'],
+      ['s-air', '空調・コンプレッサー', '#2f9e44', 'エアコン, 空調, コンプレッサー, エアー'],
+      ['s-building', '建物・舗装', '#5c940d', '防火壁, 舗装, 屋根, 外壁, トイレ, 排水, 建物, 事務所, シャッター'],
+      ['s-other', 'その他設備', '#8a8f98', '']
     ];
-    var rules = [
-      { id: 'r-pw', categoryId: 'c-exclude', enabled: true, conditions: [
-        { field: 'subject', op: 'contains', value: 'パスワード, password, 認証コード, ワンタイム, ログイン, サインイン, 確認コード, verification, アカウント' }] },
-      { id: 'r-noreply', categoryId: 'c-exclude', enabled: true, conditions: [
-        { field: 'from', op: 'contains', value: 'noreply, no-reply, donotreply, mailer-daemon, postmaster' }] },
-      { id: 'r-estimate', categoryId: 'c-estimate', enabled: true, conditions: [
-        { field: 'subject', op: 'contains', value: '見積, 御見積, 請求, 精算' }] },
-      { id: 'r-done', categoryId: 'c-done', enabled: true, conditions: [
-        { field: 'subject', op: 'contains', value: '完了, 完工, 作業報告, 報告書' }] },
-      { id: 'r-repair', categoryId: 'c-repair', enabled: true, conditions: [
-        { field: 'any', op: 'contains', value: '補修, 修理, 修繕, 修復, 復旧, 故障, 不具合, 破損, 損傷, 異常, 不良, 点検, 交換, 取替, 取り替え, 漏れ, 漏洩, 調整, 直して, メンテ, 工事, 対応依頼, 依頼' }] }
-    ];
-    return { categories: cats, rules: rules };
+    var sub = { categories: [], rules: [] };
+    subDefs.forEach(function (d) {
+      sub.categories.push({ id: d[0], name: d[1], color: d[2], exclude: false });
+      if (d[3]) sub.rules.push(rule('r' + d[0], d[0], 'any', d[3]));
+    });
+    return { version: 2, axes: { main: main, sub: sub }, ssLabels: SS_LABELS.slice() };
+  }
+
+  /**
+   * 保存された設定を v2 にそろえる。v1（categories/rules が 1 軸、manual[key] = catId）を主カテゴリへ移す
+   * @returns {{settings: object, manual: object, migrated: boolean}}
+   */
+  function migrate(settings, manual) {
+    var d = defaults();
+    var migrated = false;
+    var out;
+    if (settings && settings.axes && settings.axes.main) {
+      out = settings;
+      if (!out.axes.sub) out.axes.sub = d.axes.sub;
+      if (!Array.isArray(out.ssLabels)) out.ssLabels = d.ssLabels;
+      out.version = 2;
+    } else if (settings && Array.isArray(settings.categories)) {
+      migrated = true;
+      var cats = settings.categories.map(function (c) {
+        if (c.id === 'c-estimate' && c.name === '見積・請求') return Object.assign({}, c, { name: '見積' });
+        return c;
+      });
+      var rules = (settings.rules || []).map(function (r) {
+        if (r.id === 'r-estimate' && r.conditions && r.conditions.length === 1 && r.conditions[0].value === V1_ESTIMATE) {
+          return Object.assign({}, r, { conditions: [Object.assign({}, r.conditions[0], { value: '見積, 御見積, お見積' })] });
+        }
+        return r;
+      });
+      // 初期設定のままの利用者には、新しく分けた「発注」「請求」も足す（見積ルールより前に置く）
+      var has = function (id) { return cats.some(function (c) { return c.id === id; }); };
+      var at = rules.findIndex(function (r) { return r.id === 'r-estimate'; });
+      if (at < 0) at = rules.length;
+      // カテゴリは業務の流れの順（発注は見積の後、請求は完了報告の後）に置く
+      [['c-order', 'r-order', 'c-estimate'], ['c-invoice', 'r-invoice', 'c-done']].forEach(function (t) {
+        if (has(t[0])) return;
+        var dc = d.axes.main.categories.find(function (c) { return c.id === t[0]; });
+        var dr = d.axes.main.rules.find(function (r) { return r.id === t[1]; });
+        var after = cats.findIndex(function (c) { return c.id === t[2]; });
+        cats.splice(after < 0 ? cats.length : after + 1, 0, dc);
+        rules.splice(at, 0, dr);
+      });
+      out = { version: 2, axes: { main: { categories: cats, rules: rules }, sub: d.axes.sub }, ssLabels: d.ssLabels };
+    } else {
+      out = d;
+    }
+    var m2 = {};
+    if (manual) {
+      for (var k in manual) {
+        var v = manual[k];
+        if (typeof v === 'string') { m2[k] = { main: v }; migrated = true; }
+        else if (v && typeof v === 'object') m2[k] = v;
+      }
+    }
+    return { settings: out, manual: m2, migrated: migrated };
   }
 
   var api = {
-    FIELDS: FIELDS, OPS: OPS, classify: classify, matchRule: matchRule,
-    fieldValue: fieldValue, defaults: defaults, newId: newId, norm: norm
+    FIELDS: FIELDS, OPS: OPS, AXES: AXES, classify: classify, matchRule: matchRule,
+    fieldValue: fieldValue, defaults: defaults, migrate: migrate, newId: newId, norm: norm
   };
   g.MsgClassify = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script data-src="js/fields.js">
+/*
+ * メールから項目を取り出す。今は SS（店舗）名だけ。
+ * 1. 添付 xlsx の「SS名」などの見出しの隣のセル
+ * 2. 件名・本文の「○○SS」「○○給油所」の形
+ */
+(function (g) {
+  'use strict';
+
+  /** SS 名の表記をそろえる: 全角半角・空白・前後の記号 */
+  function normalizeSs(s) {
+    s = (s || '');
+    if (s.normalize) s = s.normalize('NFKC');
+    return s.replace(/[\s　]+/g, '').replace(/^[【\[(（「『:：・-]+|[】\])）」』:：・-]+$/g, '').replace(/ss$/i, 'SS');
+  }
+
+  function labelKey(s) {
+    s = s || '';
+    if (s.normalize) s = s.normalize('NFKC');
+    return s.replace(/[\s　:：]+/g, '').toLowerCase();
+  }
+
+  /** xlsxText（行ごとにセルをタブ区切り）から、見出しの右隣の値を取る */
+  function fromXlsx(text, labels) {
+    if (!text) return '';
+    var keys = labels.map(labelKey).filter(Boolean);
+    var lines = text.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var cells = lines[i].split('\t');
+      for (var c = 0; c < cells.length - 1; c++) {
+        if (keys.indexOf(labelKey(cells[c])) < 0) continue;
+        for (var n = c + 1; n < cells.length; n++) {
+          var v = normalizeSs(cells[n]);
+          if (v) return v;
+        }
+      }
+    }
+    return '';
+  }
+
+  // 漢字・カタカナ・英数字が続いた後に SS / 給油所 / サービスステーション。ひらがなは含めない（「の本町SS」を避ける）
+  var SS_RE = /([一-鿿々゠-ヿｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ・ー]{1,20}?)(SS|ＳＳ|給油所|サービスステーション)(?![A-Za-z])/;
+
+  function fromText(s) {
+    if (!s) return '';
+    var m = SS_RE.exec(s.normalize ? s.normalize('NFKC') : s);
+    if (!m) return '';
+    var head = m[1].replace(/^(RE|FW|FWD)$/i, '');
+    if (!head) return '';
+    return normalizeSs(head + (m[2] === 'ＳＳ' ? 'SS' : m[2]));
+  }
+
+  /**
+   * @param {object} mail subject, bodyText, xlsxText を持つ
+   * @param {string[]} labels xlsx の見出し語
+   * @returns {{name: string, by: 'xlsx'|'text'|null}}
+   */
+  function extractSs(mail, labels) {
+    var x = fromXlsx(mail.xlsxText, labels || []);
+    if (x) return { name: x, by: 'xlsx' };
+    var t = fromText(mail.subject) || fromText((mail.bodyText || '').slice(0, 3000));
+    if (t) return { name: t, by: 'text' };
+    return { name: '', by: null };
+  }
+
+  var api = { extractSs: extractSs, normalizeSs: normalizeSs };
+  g.MsgFields = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script data-src="js/summary.js">
+/*
+ * 集計。画面に依存しない純粋関数だけを置く（Node でテストする）。
+ * rows の各要素は { cls: { main: {categoryId}, sub: {categoryId} }, ss: {name}, sentAt, receivedAt }。
+ * カテゴリ ID が null のものは「未分類」の列・行（キー NONE）に数える。
+ */
+(function (g) {
+  'use strict';
+
+  var NONE = '__none__';
+  var NO_SS = '（SS 不明）';
+
+  function idOf(m, axis) { return (m.cls && m.cls[axis] && m.cls[axis].categoryId) || NONE; }
+
+  /** カテゴリ一覧＋未分類（未分類が 0 件なら出さない） */
+  function axisKeys(rows, cats, axis) {
+    var keys = cats.map(function (c) { return c.id; });
+    var known = {};
+    keys.forEach(function (k) { known[k] = 1; });
+    var hasNone = rows.some(function (m) { return !known[idOf(m, axis)]; });
+    if (hasNone) keys.push(NONE);
+    return keys;
+  }
+
+  /** 主×副の件数表 */
+  function matrix(rows, mainCats, subCats) {
+    var mk = axisKeys(rows, mainCats, 'main');
+    var sk = axisKeys(rows, subCats, 'sub');
+    var mSet = {}, sSet = {};
+    mk.forEach(function (k) { mSet[k] = 1; });
+    sk.forEach(function (k) { sSet[k] = 1; });
+    var cells = {}, rowTotal = {}, colTotal = {}, max = 0;
+    mk.forEach(function (r) { cells[r] = {}; rowTotal[r] = 0; sk.forEach(function (c) { cells[r][c] = 0; }); });
+    sk.forEach(function (c) { colTotal[c] = 0; });
+    rows.forEach(function (m) {
+      var r = idOf(m, 'main'), c = idOf(m, 'sub');
+      if (!mSet[r]) r = NONE;
+      if (!sSet[c]) c = NONE;
+      cells[r][c]++;
+      rowTotal[r]++;
+      colTotal[c]++;
+      if (cells[r][c] > max) max = cells[r][c];
+    });
+    return { rows: mk, cols: sk, cells: cells, rowTotal: rowTotal, colTotal: colTotal, total: rows.length, max: max };
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function monthOf(m) {
+    var iso = m.sentAt || m.receivedAt;
+    if (!iso) return null;
+    var d = new Date(iso);
+    if (isNaN(d)) return null;
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1);
+  }
+
+  /** 月別（行＝月の古い順、列＝主カテゴリ）。日付の無いメールは「日付なし」 */
+  function monthly(rows, mainCats) {
+    var cols = axisKeys(rows, mainCats, 'main');
+    var known = {};
+    cols.forEach(function (k) { known[k] = 1; });
+    var map = {};
+    var NO_DATE = '日付なし';
+    rows.forEach(function (m) {
+      var mo = monthOf(m) || NO_DATE;
+      var c = idOf(m, 'main');
+      if (!known[c]) c = NONE;
+      if (!map[mo]) { map[mo] = { total: 0 }; cols.forEach(function (k) { map[mo][k] = 0; }); }
+      map[mo][c]++;
+      map[mo].total++;
+    });
+    // 件数 0 の月も抜けないように、最初の月から最後の月まで埋める
+    var months = Object.keys(map).filter(function (k) { return k !== NO_DATE; }).sort();
+    var filled = [];
+    if (months.length) {
+      var y = +months[0].slice(0, 4), mo = +months[0].slice(5);
+      var last = months[months.length - 1];
+      for (var guard = 0; guard < 1200; guard++) {
+        var key = y + '-' + pad(mo);
+        filled.push(key);
+        if (key === last) break;
+        if (++mo > 12) { mo = 1; y++; }
+      }
+    }
+    if (map[NO_DATE]) filled.push(NO_DATE);
+    var out = filled.map(function (k) {
+      var row = map[k] || { total: 0 };
+      cols.forEach(function (c) { if (row[c] == null) row[c] = 0; });
+      return { month: k, counts: row, total: row.total };
+    });
+    var max = out.reduce(function (a, r) { return Math.max(a, r.total); }, 0);
+    return { cols: cols, rows: out, max: max, total: rows.length };
+  }
+
+  /** SS 別（行＝SS の件数が多い順、列＝主カテゴリ） */
+  function bySs(rows, mainCats) {
+    var cols = axisKeys(rows, mainCats, 'main');
+    var known = {};
+    cols.forEach(function (k) { known[k] = 1; });
+    var map = {};
+    rows.forEach(function (m) {
+      var s = (m.ss && m.ss.name) || NO_SS;
+      var c = idOf(m, 'main');
+      if (!known[c]) c = NONE;
+      if (!map[s]) { map[s] = { total: 0 }; cols.forEach(function (k) { map[s][k] = 0; }); }
+      map[s][c]++;
+      map[s].total++;
+    });
+    var list = Object.keys(map).map(function (k) { return { ss: k, counts: map[k], total: map[k].total }; });
+    list.sort(function (a, b) {
+      if ((a.ss === NO_SS) !== (b.ss === NO_SS)) return a.ss === NO_SS ? 1 : -1; // 不明は最後
+      return b.total - a.total || (a.ss < b.ss ? -1 : 1);
+    });
+    var max = list.reduce(function (a, r) { return Math.max(a, r.total); }, 0);
+    return { cols: cols, rows: list, max: max, total: rows.length };
+  }
+
+  function cell(v) {
+    var s = v == null ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  /** 2 次元配列 → CSV（UTF-8 BOM 付き、Excel 向け） */
+  function tableToCsv(table) {
+    return '﻿' + table.map(function (r) { return r.map(cell).join(','); }).join('\r\n') + '\r\n';
+  }
+
+  var api = { NONE: NONE, NO_SS: NO_SS, matrix: matrix, monthly: monthly, bySs: bySs, tableToCsv: tableToCsv, monthOf: monthOf };
+  g.MsgSummary = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 </script>
@@ -1721,6 +2112,8 @@ body.with-detail .list .snip { display: none; }
   function attNames(m) {
     return (m.attachments || []).filter(function (a) { return !a.hidden; }).map(function (a) { return a.name; }).join('; ');
   }
+  function isPdf(a) { return /\.pdf$/i.test(a.name || '') || /application\/pdf/i.test(a.mime || ''); }
+  function pdfNames(m) { return (m.attachments || []).filter(isPdf).map(function (a) { return a.name; }).join('; '); }
   var IMP = { 0: '低', 1: '普通', 2: '高' };
 
   function csvCell(v) {
@@ -1732,8 +2125,10 @@ body.with-detail .list .snip { display: none; }
   }
 
   var COLS = [
-    ['カテゴリ', function (m, c) { return c(m); }],
-    ['分類方法', function (m, c, b) { return b(m); }],
+    ['主カテゴリ', function (m, info) { return info.main(m); }],
+    ['副カテゴリ', function (m, info) { return info.sub(m); }],
+    ['SS名', function (m, info) { return info.ss(m); }],
+    ['分類方法', function (m, info) { return info.by(m); }],
     ['送信日時', function (m) { return fmtDate(m.sentAt); }],
     ['受信日時', function (m) { return fmtDate(m.receivedAt); }],
     ['送信者名', function (m) { return m.from ? m.from.name : ''; }],
@@ -1744,6 +2139,7 @@ body.with-detail .list .snip { display: none; }
     ['件名', function (m) { return m.subject; }],
     ['本文', function (m) { return m.bodyText; }],
     ['添付ファイル名', attNames],
+    ['添付PDF', pdfNames],
     ['添付xlsxの内容', function (m) { return m.xlsxText || ''; }],
     ['添付数', function (m) { return (m.attachments || []).filter(function (a) { return !a.hidden; }).length; }],
     ['重要度', function (m) { return IMP[m.importance] || ''; }],
@@ -1753,21 +2149,24 @@ body.with-detail .list .snip { display: none; }
     ['エラー', function (m) { return m.error || ''; }]
   ];
 
-  function toCsv(rows, catName, byName) {
+  /**
+   * info: { main(m), sub(m), ss(m), by(m) } それぞれ表示用の文字列を返す
+   */
+  function toCsv(rows, info) {
     var lines = [COLS.map(function (c) { return csvCell(c[0]); }).join(',')];
     rows.forEach(function (m) {
-      lines.push(COLS.map(function (c) { return csvCell(c[1](m, catName, byName)); }).join(','));
+      lines.push(COLS.map(function (c) { return csvCell(c[1](m, info)); }).join(','));
     });
     return '﻿' + lines.join('\r\n') + '\r\n';
   }
 
-  function toJson(rows, catName) {
+  function toJson(rows, info) {
     return JSON.stringify({
       exportedAt: new Date().toISOString(),
       count: rows.length,
       mails: rows.map(function (m) {
         return {
-          category: catName(m), file: m.path || m.fileName, error: m.error || null,
+          mainCategory: info.main(m), subCategory: info.sub(m), ss: info.ss(m) || null, file: m.path || m.fileName, error: m.error || null,
           subject: m.subject, from: m.from, to: m.to, cc: m.cc, bcc: m.bcc,
           sentAt: m.sentAt, receivedAt: m.receivedAt, importance: m.importance,
           messageId: m.messageId, inReplyTo: m.inReplyTo, references: m.references,
@@ -1787,11 +2186,11 @@ body.with-detail .list .snip { display: none; }
     });
   }
 
-  /** カテゴリ別の目次つき 1 ファイル。本文はテキストで入れる（外部画像やスクリプトを持ち込まない） */
-  function toHtml(rows, catName, catOrder) {
+  /** 主カテゴリ別の目次つき 1 ファイル。本文はテキストで入れる（外部画像やスクリプトを持ち込まない） */
+  function toHtml(rows, info, catOrder) {
     var groups = {};
     rows.forEach(function (m) {
-      var c = catName(m) || '未分類';
+      var c = info.main(m) || '未分類';
       (groups[c] = groups[c] || []).push(m);
     });
     var names = Object.keys(groups).sort(function (a, b) {
@@ -1819,6 +2218,8 @@ body.with-detail .list .snip { display: none; }
       groups[n].forEach(function (m) {
         h.push('<article><h3>' + esc(m.subject || '（件名なし）') + '</h3><table>');
         var row = function (k, v) { if (v) h.push('<tr><th>' + k + '</th><td>' + esc(v) + '</td></tr>'); };
+        row('副カテゴリ', info.sub(m));
+        row('SS', info.ss(m));
         row('送信者', m.from ? addr(m.from) : '');
         row('送信日時', fmtDate(m.sentAt));
         row('受信日時', fmtDate(m.receivedAt));
@@ -1835,7 +2236,7 @@ body.with-detail .list .snip { display: none; }
     return h.join('\n');
   }
 
-  var api = { toCsv: toCsv, toJson: toJson, toHtml: toHtml, fmtDate: fmtDate, addrs: addrs, addr: addr, esc: esc };
+  var api = { isPdf: isPdf, toCsv: toCsv, toJson: toJson, toHtml: toHtml, fmtDate: fmtDate, addrs: addrs, addr: addr, esc: esc };
   g.MsgExport = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -1854,16 +2255,20 @@ body.with-detail .list .snip { display: none; }
   const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
 
   const Msg = window.MsgParser, Cls = window.MsgClassify, Store = window.MsgStore, Exp = window.MsgExport, Xlsx = window.MsgXlsx;
+  const Fields = window.MsgFields, Sum = window.MsgSummary;
+  const NONE = Sum.NONE;
   const $ = (id) => document.getElementById(id);
   const PAGE = 100;
   const MAX_XLSX_TEXT = 50000;
 
   const state = {
     mails: [],
-    categories: [],
-    rules: [],
-    manual: {},
-    filter: { cat: 'all', q: '', from: '', dateFrom: '', dateTo: '', att: '' },
+    settings: Cls.defaults(), // { axes: { main, sub }, ssLabels }
+    manual: {},               // key -> { main?, sub?, ss? }
+    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false },
+    mode: 'list',             // 'list' | 'summary'
+    settingsTab: 'main',      // 'main' | 'sub' | 'ss'
+    sumIncExcluded: false,
     sort: { key: 'date', dir: -1 },
     page: 0,
     selected: new Set(),
@@ -1954,18 +2359,25 @@ body.with-detail .list .snip { display: none; }
   function saveSettings() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      Store.set('settings', { version: 1, categories: state.categories, rules: state.rules });
+      Store.set('settings', state.settings);
       Store.set('manual', state.manual);
     }, 300);
   }
   async function loadSettings() {
-    const s = await Store.get('settings');
-    const m = await Store.get('manual');
-    if (s && s.categories) { state.categories = s.categories; state.rules = s.rules || []; }
-    else { const d = Cls.defaults(); state.categories = d.categories; state.rules = d.rules; }
-    state.manual = m || {};
+    const r = Cls.migrate(await Store.get('settings'), await Store.get('manual'));
+    state.settings = r.settings;
+    state.manual = r.manual;
+    if (r.migrated) saveSettings(); // 1 軸の設定を主カテゴリへ移したので保存し直す
   }
-  const catById = (id) => state.categories.find((c) => c.id === id) || null;
+  const axis = (a) => state.settings.axes[a];
+  const catById = (id, a = 'main') => axis(a).categories.find((c) => c.id === id) || null;
+
+  /** 手直しを 1 項目だけ変える。value が空なら消す */
+  function setManual(key, field, value) {
+    const cur = Object.assign({}, state.manual[key] || {});
+    if (value) cur[field] = value; else delete cur[field];
+    if (Object.keys(cur).length) state.manual[key] = cur; else delete state.manual[key];
+  }
 
   // ---------- 読み込み ----------
 
@@ -2074,23 +2486,42 @@ body.with-detail .list .snip { display: none; }
 
   // ---------- 分類 ----------
 
+  const EMPTY_CLS = { categoryId: null, by: null, ruleId: null, hits: [] };
+
+  function classifyAxis(m, a, manualId) {
+    if (manualId && !catById(manualId, a)) manualId = null; // 消したカテゴリの手直しは無視する
+    const r = m.error
+      ? (manualId ? { categoryId: manualId, by: 'manual', ruleId: null, hits: [] } : EMPTY_CLS)
+      : Cls.classify(m, axis(a).rules, manualId);
+    return r.categoryId && !catById(r.categoryId, a) ? EMPTY_CLS : r;
+  }
+
   function reclassify() {
     const keyCount = new Map();
     for (const m of state.mails) keyCount.set(m.key, (keyCount.get(m.key) || 0) + 1);
     for (const m of state.mails) {
       m.dup = keyCount.get(m.key) > 1;
-      if (m.error) { m.cls = { categoryId: state.manual[m.key] || null, by: state.manual[m.key] ? 'manual' : null, hits: [] }; continue; }
-      m.cls = Cls.classify(m, state.rules, state.manual);
-      if (m.cls.categoryId && !catById(m.cls.categoryId)) m.cls = { categoryId: null, by: null, hits: [] };
+      const man = state.manual[m.key] || {};
+      m.cls = { main: classifyAxis(m, 'main', man.main), sub: classifyAxis(m, 'sub', man.sub) };
+      if (man.ss) m.ss = { name: Fields.normalizeSs(man.ss), by: 'manual' };
+      else {
+        if (!m._ssAuto) m._ssAuto = m.error ? { name: '', by: null } : Fields.extractSs(m, state.settings.ssLabels);
+        m.ss = m._ssAuto;
+      }
     }
   }
 
-  function catName(m) { const c = m.cls && catById(m.cls.categoryId); return c ? c.name : '未分類'; }
+  function catName(m, a = 'main') { const c = m.cls && catById(m.cls[a].categoryId, a); return c ? c.name : '未分類'; }
   function byName(m) {
-    if (!m.cls || !m.cls.by) return '';
-    if (m.cls.by === 'manual') return '手動';
-    return 'ルール' + (m.cls.hits && m.cls.hits.length ? '（' + m.cls.hits.join('・') + '）' : '');
+    const one = (a, label) => {
+      const c = m.cls[a];
+      if (!c.by) return '';
+      if (c.by === 'manual') return label + ': 手動';
+      return label + ': ルール' + (c.hits && c.hits.length ? '（' + c.hits.join('・') + '）' : '');
+    };
+    return [one('main', '主'), one('sub', '副')].filter(Boolean).join(' / ');
   }
+  const EXPORT_INFO = { main: (m) => catName(m, 'main'), sub: (m) => catName(m, 'sub'), ss: (m) => (m.ss && m.ss.name) || '', by: byName };
 
   // ---------- 絞り込み・並べ替え ----------
 
@@ -2103,16 +2534,24 @@ body.with-detail .list .snip { display: none; }
     return m._search;
   }
 
-  function computeView() {
-    const f = state.filter;
+  const hasPdf = (m) => m.attachments.some(Exp.isPdf);
+  const hasXlsx = (m) => m.attachments.some(Xlsx.isXlsx);
+
+  /** 絞り込み条件に合うメール（並べ替え前）。集計画面でも使う */
+  function filteredMails(ignoreHideExcl) {
+    const f = Object.assign({}, state.filter, ignoreHideExcl ? { hideExcl: false } : null);
     const q = Cls.norm(f.q).length ? f.q.split(/[\s　]+/).map(Cls.norm).filter(Boolean) : [];
     const fq = Cls.norm(f.from);
     const dFrom = f.dateFrom ? new Date(f.dateFrom + 'T00:00:00').getTime() : null;
     const dTo = f.dateTo ? new Date(f.dateTo + 'T23:59:59.999').getTime() : null;
-    const list = state.mails.filter((m) => {
+    return state.mails.filter((m) => {
       if (f.cat === 'error') { if (!m.error) return false; }
-      else if (f.cat === 'none') { if (m.cls.categoryId) return false; }
-      else if (f.cat !== 'all' && m.cls.categoryId !== f.cat) return false;
+      else if (f.cat === 'none') { if (m.cls.main.categoryId || m.error) return false; } // 読めなかったファイルは未分類に入れない
+      else if (f.cat !== 'all' && m.cls.main.categoryId !== f.cat) return false;
+      if (f.sub === NONE) { if (m.cls.sub.categoryId || m.error) return false; }
+      else if (f.sub && m.cls.sub.categoryId !== f.sub) return false;
+      if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss) return false; }
+      if (f.hideExcl && isExcluded(m)) return false;
       if (q.length) { const s = searchText(m); if (!q.every((w) => s.includes(w))) return false; }
       if (fq && !Cls.norm(m.from.name + ' ' + m.from.email).includes(fq)) return false;
       if (dFrom != null || dTo != null) {
@@ -2122,12 +2561,18 @@ body.with-detail .list .snip { display: none; }
         if (dFrom != null && t < dFrom) return false;
         if (dTo != null && t > dTo) return false;
       }
-      if (f.att) {
+      if (f.att === 'pdfonly') { if (!hasPdf(m) || hasXlsx(m)) return false; }
+      else if (f.att === 'pdf') { if (!hasPdf(m)) return false; }
+      else if (f.att) {
         const has = m.attachments.some((a) => !a.hidden);
         if ((f.att === 'yes') !== has) return false;
       }
       return true;
     });
+  }
+
+  function computeView() {
+    const list = filteredMails();
     const { key, dir } = state.sort;
     const val = {
       date: (m) => mailDate(m) || '',
@@ -2145,16 +2590,43 @@ body.with-detail .list .snip { display: none; }
   function render() {
     computeView();
     renderCats();
-    renderList();
-    renderBulk();
+    renderFilterOptions();
     const has = state.mails.length > 0;
+    const sum = state.mode === 'summary';
     $('empty').hidden = has;
-    $('tableWrap').hidden = !has;
+    $('tabList').classList.toggle('on', !sum);
+    $('tabSummary').classList.toggle('on', sum);
+    $('tabList').setAttribute('aria-selected', String(!sum));
+    $('tabSummary').setAttribute('aria-selected', String(sum));
+    $('tableWrap').hidden = !has || sum;
+    $('summary').hidden = !has || !sum;
+    if (sum) { $('bulk').hidden = true; renderSummary(); }
+    else { renderList(); renderBulk(); }
   }
 
-  function catChip(c, by) {
-    if (!c) return el('span', { class: 'chip none', text: '未分類' });
-    return el('span', { class: 'chip', style: `--c:${c.color}`, title: by === 'manual' ? '手で付けたカテゴリ' : 'ルールで付いたカテゴリ' },
+  /** 副カテゴリと SS の絞り込み欄の選択肢を作り直す */
+  function renderFilterOptions() {
+    const subSel = $('subQ');
+    const keepSub = state.filter.sub;
+    clear(subSel);
+    subSel.appendChild(el('option', { value: '' }, '副カテゴリ: すべて'));
+    for (const c of axis('sub').categories) subSel.appendChild(el('option', { value: c.id, selected: c.id === keepSub }, c.name));
+    subSel.appendChild(el('option', { value: NONE, selected: keepSub === NONE }, '（未分類）'));
+
+    const ssSel = $('ssQ');
+    const keepSs = state.filter.ss;
+    const counts = new Map();
+    for (const m of state.mails) { const n = (m.ss && m.ss.name) || Sum.NO_SS; counts.set(n, (counts.get(n) || 0) + 1); }
+    const names = [...counts.keys()].sort((a, b) => (a === Sum.NO_SS) - (b === Sum.NO_SS) || counts.get(b) - counts.get(a) || (a < b ? -1 : 1));
+    clear(ssSel);
+    ssSel.appendChild(el('option', { value: '' }, 'SS: すべて'));
+    if (keepSs && !counts.has(keepSs)) names.unshift(keepSs);
+    for (const n of names) ssSel.appendChild(el('option', { value: n, selected: n === keepSs }, `${n}（${counts.get(n) || 0}）`));
+  }
+
+  function catChip(c, by, small) {
+    if (!c) return el('span', { class: 'chip none' + (small ? ' sub' : ''), text: '未分類' });
+    return el('span', { class: 'chip' + (small ? ' sub' : ''), style: `--c:${c.color}`, title: by === 'manual' ? '手で付けたカテゴリ' : 'ルールで付いたカテゴリ' },
       [el('i'), c.name, by === 'manual' ? el('b', { class: 'manual', text: '手' }) : null]);
   }
 
@@ -2165,8 +2637,9 @@ body.with-detail .list .snip { display: none; }
     let none = 0, err = 0;
     for (const m of state.mails) {
       if (m.error) err++;
-      if (m.cls.categoryId) counts.set(m.cls.categoryId, (counts.get(m.cls.categoryId) || 0) + 1);
-      else none++;
+      const id = m.cls.main.categoryId;
+      if (id) counts.set(id, (counts.get(id) || 0) + 1);
+      else if (!m.error) none++;
     }
     const item = (key, label, n, color, extra) => {
       const li = el('li', { class: 'cat' + (state.filter.cat === key ? ' active' : '') + (extra ? ' ' + extra : '') }, [
@@ -2177,7 +2650,7 @@ body.with-detail .list .snip { display: none; }
       ul.appendChild(li);
     };
     item('all', 'すべて', state.mails.length, null, 'all');
-    for (const c of state.categories) item(c.id, c.name, counts.get(c.id) || 0, c.color, c.exclude ? 'excluded' : '');
+    for (const c of axis('main').categories) item(c.id, c.name, counts.get(c.id) || 0, c.color, c.exclude ? 'excluded' : '');
     item('none', '未分類', none, '#ced4da');
     if (err) item('error', '読めなかったファイル', err, '#e03131', 'err');
   }
@@ -2197,7 +2670,11 @@ body.with-detail .list .snip { display: none; }
           type: 'checkbox', checked: state.selected.has(m.id), 'aria-label': '選択',
           onchange: (ev) => { ev.target.checked ? state.selected.add(m.id) : state.selected.delete(m.id); renderBulk(); }
         })),
-        el('td', { class: 'cat' }, catChip(catById(m.cls.categoryId), m.cls.by)),
+        el('td', { class: 'cat' }, el('div', { class: 'catstack' }, [
+          catChip(catById(m.cls.main.categoryId, 'main'), m.cls.main.by),
+          catChip(catById(m.cls.sub.categoryId, 'sub'), m.cls.sub.by, true),
+          m.ss && m.ss.name ? el('span', { class: 'ss', text: m.ss.name, title: 'SS 名' + (m.ss.by === 'manual' ? '（手で入力）' : '') }) : null
+        ])),
         el('td', { class: 'date', text: fmtDateShort(mailDate(m)) }),
         el('td', { class: 'from', title: m.from.email || '' }, m.from.name || m.from.email || '（不明）'),
         el('td', { class: 'subject' }, [
@@ -2209,7 +2686,8 @@ body.with-detail .list .snip { display: none; }
         ]),
         el('td', { class: 'att', title: visibleAtt.map((a) => a.name).join('\n') }, visibleAtt.length ? [
           el('span', { text: '📎' + visibleAtt.length }),
-          visibleAtt.some(Xlsx.isXlsx) ? el('span', { class: 'xl', text: 'xlsx' }) : null
+          visibleAtt.some(Xlsx.isXlsx) ? el('span', { class: 'xl', text: 'xlsx' }) : null,
+          visibleAtt.some(Exp.isPdf) ? el('span', { class: 'xl pdf', text: 'pdf' }) : null
         ] : '')
       ]);
       tb.appendChild(tr);
@@ -2235,10 +2713,10 @@ body.with-detail .list .snip { display: none; }
     }
   }
 
-  function catOptions(select, withAuto, current) {
+  function catOptions(select, withAuto, current, a = 'main') {
     clear(select);
     if (withAuto) select.appendChild(el('option', { value: '' }, withAuto));
-    for (const c of state.categories) select.appendChild(el('option', { value: c.id, selected: c.id === current }, c.name));
+    for (const c of axis(a).categories) select.appendChild(el('option', { value: c.id, selected: c.id === current }, c.name));
   }
 
   function renderBulk() {
@@ -2246,7 +2724,7 @@ body.with-detail .list .snip { display: none; }
     $('bulk').hidden = n === 0;
     $('selCount').textContent = `${n} 件を選択中:`;
     const keep = $('bulkCat').value;
-    catOptions($('bulkCat'), null, keep);
+    catOptions($('bulkCat'), null, keep, $('bulkAxis').value);
   }
 
   // ---------- 詳細 ----------
@@ -2370,6 +2848,22 @@ body.with-detail .list .snip { display: none; }
           if (depth === 0 && list.filter(Xlsx.isXlsx).length === 1) btn.click(); // 1つだけなら最初から開く
           continue;
         }
+        if (Exp.isPdf(a)) {
+          // FAX を PDF にしたものは中身が画像。ブラウザ内蔵の PDF 表示で見る
+          const url = blobUrl(a.data, 'application/pdf');
+          const holder = el('div', { class: 'pdf-holder' });
+          let opened = false;
+          const btn = el('button', { class: 'btn small primary', type: 'button', onclick: () => {
+            if (opened) { clear(holder); opened = false; btn.textContent = 'PDF を表示'; return; }
+            opened = true; btn.textContent = 'PDF を閉じる';
+            holder.appendChild(el('iframe', { class: 'pdfview', src: url, title: a.name }));
+          } }, 'PDF を表示');
+          row.appendChild(btn);
+          row.appendChild(el('a', { class: 'btn small ghost', href: url, target: '_blank', rel: 'noopener' }, '新しいタブで開く'));
+          box.appendChild(row);
+          box.appendChild(holder);
+          continue;
+        }
         if (isImage(a) && !(a.hidden && msg.bodyHtml)) {
           const url = blobUrl(a.data, mimeOf(a));
           thumbs.appendChild(el('a', { href: url, target: '_blank', rel: 'noopener', title: a.name + '（クリックで拡大）' },
@@ -2425,18 +2919,29 @@ body.with-detail .list .snip { display: none; }
     for (const tr of $('rows').children) tr.classList.remove('current');
     renderList();
 
-    const sel = $('detailCat');
-    const autoRes = m.error ? null : Cls.classify(m, state.rules, {});
-    const autoCat = autoRes && catById(autoRes.categoryId);
-    catOptions(sel, '自動分類' + (autoCat ? `（${autoCat.name}）` : '（未分類）'), m.cls.by === 'manual' ? m.cls.categoryId : '');
+    for (const [a, id] of [['main', 'detailCat'], ['sub', 'detailSub']]) {
+      const autoRes = m.error ? null : Cls.classify(m, axis(a).rules, null);
+      const autoCat = autoRes && catById(autoRes.categoryId, a);
+      catOptions($(id), (a === 'main' ? '主: ' : '副: ') + '自動' + (autoCat ? `（${autoCat.name}）` : '（未分類）'), m.cls[a].by === 'manual' ? m.cls[a].categoryId : '', a);
+    }
+    const ssIn = $('detailSs');
+    ssIn.value = m.ss && m.ss.by === 'manual' ? m.ss.name : '';
+    ssIn.placeholder = m.ss && m.ss.name && m.ss.by !== 'manual' ? `SS: ${m.ss.name}（自動）` : 'SS 名（不明）';
 
     const box = $('detailBody');
     clear(box);
     box.appendChild(el('h2', { class: 'subj', text: m.subject || '（件名なし）' }));
-    const why = m.cls.by === 'manual' ? '手で付けたカテゴリです'
-      : m.cls.by === 'rule' ? `ルールで分類: 「${(m.cls.hits || []).join('」「') || '条件に一致'}」に当てはまりました`
-        : 'どのルールにも当てはまりませんでした';
-    box.appendChild(el('p', { class: 'why' }, [catChip(catById(m.cls.categoryId), m.cls.by), ' ', why]));
+    const why = (a) => {
+      const c = m.cls[a];
+      return c.by === 'manual' ? '手で付けたカテゴリです'
+        : c.by === 'rule' ? `ルールで分類: 「${(c.hits || []).join('」「') || '条件に一致'}」に当てはまりました`
+          : 'どのルールにも当てはまりませんでした';
+    };
+    box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: '主' }), catChip(catById(m.cls.main.categoryId, 'main'), m.cls.main.by), ' ', why('main')]));
+    box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: '副' }), catChip(catById(m.cls.sub.categoryId, 'sub'), m.cls.sub.by, true), ' ', why('sub')]));
+    const ssWhy = !m.ss || !m.ss.name ? '取り出せませんでした（上の欄に入力できます）'
+      : m.ss.by === 'manual' ? '手で入力した名前です' : m.ss.by === 'xlsx' ? '添付 xlsx の見出しの隣から取りました' : '件名・本文から取りました';
+    box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: 'SS' }), el('b', { text: (m.ss && m.ss.name) || '—' }), ' ', ssWhy]));
     box.appendChild(el('p', { class: 'file', text: '元ファイル: ' + (m.path || m.fileName) + '（' + fmtSize(m.size) + '）' }));
     if (m.error) { box.appendChild(el('p', { class: 'note err', text: 'このファイルは読み取れませんでした: ' + m.error })); return; }
 
@@ -2483,7 +2988,7 @@ body.with-detail .list .snip { display: none; }
 
   function settingsChanged(full) {
     saveSettings();
-    for (const m of state.mails) m._norm = null; // ルールの対象が変わる可能性があるので正規化の覚えを捨てる
+    for (const m of state.mails) { m._norm = null; m._ssAuto = null; } // ルールや見出し語が変わるので覚えを捨てる
     reclassify();
     render();
     if (full) renderSettings();
@@ -2493,22 +2998,36 @@ body.with-detail .list .snip { display: none; }
   const PALETTE = ['#d9480f', '#1971c2', '#2f9e44', '#7048e8', '#c2255c', '#e67700', '#0c8599', '#5c940d', '#8a8f98'];
 
   function renderSettings() {
+    const tab = state.settingsTab;
+    for (const b of document.querySelectorAll('[data-stab]')) {
+      b.classList.toggle('on', b.dataset.stab === tab);
+      b.setAttribute('aria-selected', String(b.dataset.stab === tab));
+    }
+    for (const id of ['secCats', 'secRules', 'secDomains']) $(id).hidden = tab === 'ss';
+    $('secSs').hidden = tab !== 'ss';
+    if (tab === 'ss') { renderSsSettings(); return; }
+    const a = tab;
+    const ax = axis(a);
+    $('catHelp').textContent = a === 'main'
+      ? '業務の段階で分けます。「書き出しから外す」にしたカテゴリは、書き出しと集計で既定で除外されます。'
+      : '設備・工種で分けます。1 通に 1 つ付きます。';
+
     // カテゴリ
     const ce = $('catEdit');
     clear(ce);
-    state.categories.forEach((c, i) => {
-      const used = state.mails.filter((m) => m.cls.categoryId === c.id).length;
+    ax.categories.forEach((c, i) => {
+      const used = state.mails.filter((m) => m.cls[a].categoryId === c.id).length;
       ce.appendChild(el('li', null, [
         el('input', { type: 'color', value: c.color, 'aria-label': '色', onchange: (ev) => { c.color = ev.target.value; settingsChanged(); } }),
         el('input', { type: 'text', value: c.name, class: 'name', 'aria-label': 'カテゴリ名', onchange: (ev) => { c.name = ev.target.value.trim() || c.name; settingsChanged(true); } }),
-        el('label', { class: 'excl' }, [el('input', { type: 'checkbox', checked: !!c.exclude, onchange: (ev) => { c.exclude = ev.target.checked; settingsChanged(); } }), '書き出しから外す']),
+        a === 'main' ? el('label', { class: 'excl' }, [el('input', { type: 'checkbox', checked: !!c.exclude, onchange: (ev) => { c.exclude = ev.target.checked; settingsChanged(); } }), '書き出しから外す']) : null,
         el('span', { class: 'n', text: used + ' 件' }),
-        el('button', { class: 'btn small ghost', type: 'button', title: '上へ', disabled: i === 0, onclick: () => { state.categories.splice(i - 1, 0, state.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
-        el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === state.categories.length - 1, onclick: () => { state.categories.splice(i + 1, 0, state.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
+        el('button', { class: 'btn small ghost', type: 'button', title: '上へ', disabled: i === 0, onclick: () => { ax.categories.splice(i - 1, 0, ax.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
+        el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === ax.categories.length - 1, onclick: () => { ax.categories.splice(i + 1, 0, ax.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
         el('button', { class: 'btn small ghost danger', type: 'button', onclick: () => {
-          state.categories.splice(i, 1);
-          for (const r of state.rules) if (r.categoryId === c.id) r.categoryId = '';
-          for (const k in state.manual) if (state.manual[k] === c.id) delete state.manual[k];
+          ax.categories.splice(i, 1);
+          for (const r of ax.rules) if (r.categoryId === c.id) r.categoryId = '';
+          for (const k in state.manual) if (state.manual[k][a] === c.id) setManual(k, a, null);
           settingsChanged(true);
         } }, '削除')
       ]));
@@ -2517,7 +3036,7 @@ body.with-detail .list .snip { display: none; }
     // ルール
     const re = $('ruleEdit');
     clear(re);
-    state.rules.forEach((r, i) => {
+    ax.rules.forEach((r, i) => {
       const conds = el('div', { class: 'conds' });
       r.conditions.forEach((c, j) => {
         const fieldSel = el('select', { 'aria-label': '対象', onchange: (ev) => { c.field = ev.target.value; settingsChanged(true); } });
@@ -2540,15 +3059,15 @@ body.with-detail .list .snip { display: none; }
       });
       const catSel = el('select', { 'aria-label': 'カテゴリ', onchange: (ev) => { r.categoryId = ev.target.value; settingsChanged(); } });
       catSel.appendChild(el('option', { value: '' }, '（カテゴリを選ぶ）'));
-      for (const c of state.categories) catSel.appendChild(el('option', { value: c.id, selected: r.categoryId === c.id }, c.name));
+      for (const c of ax.categories) catSel.appendChild(el('option', { value: c.id, selected: r.categoryId === c.id }, c.name));
       re.appendChild(el('li', { class: 'rule' + (r.enabled ? '' : ' off') }, [
         el('div', { class: 'rule-head' }, [
           el('label', null, [el('input', { type: 'checkbox', checked: r.enabled, onchange: (ev) => { r.enabled = ev.target.checked; settingsChanged(true); } }), '有効']),
           el('span', { class: 'rule-count', 'data-rule': r.id }),
           el('span', { class: 'sp' }),
-          el('button', { class: 'btn small ghost', type: 'button', title: '上へ（先に評価）', disabled: i === 0, onclick: () => { state.rules.splice(i - 1, 0, state.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
-          el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === state.rules.length - 1, onclick: () => { state.rules.splice(i + 1, 0, state.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
-          el('button', { class: 'btn small ghost danger', type: 'button', onclick: () => { state.rules.splice(i, 1); settingsChanged(true); } }, '削除')
+          el('button', { class: 'btn small ghost', type: 'button', title: '上へ（先に評価）', disabled: i === 0, onclick: () => { ax.rules.splice(i - 1, 0, ax.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
+          el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === ax.rules.length - 1, onclick: () => { ax.rules.splice(i + 1, 0, ax.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
+          el('button', { class: 'btn small ghost danger', type: 'button', onclick: () => { ax.rules.splice(i, 1); settingsChanged(true); } }, '削除')
         ]),
         conds,
         el('div', { class: 'rule-foot' }, [
@@ -2565,23 +3084,39 @@ body.with-detail .list .snip { display: none; }
   function debounceSettings() { clearTimeout(settingsTimer); settingsTimer = setTimeout(() => settingsChanged(), 400); }
 
   function renderRuleCounts() {
+    const a = state.settingsTab;
+    if (a === 'ss') { renderSsSettings(); return; }
     const counts = {};
-    for (const m of state.mails) if (m.cls.by === 'rule') counts[m.cls.ruleId] = (counts[m.cls.ruleId] || 0) + 1;
+    for (const m of state.mails) if (m.cls[a].by === 'rule') counts[m.cls[a].ruleId] = (counts[m.cls[a].ruleId] || 0) + 1;
     for (const s of document.querySelectorAll('.rule-count')) s.textContent = `このルールで ${counts[s.dataset.rule] || 0} 件`;
     const ce = $('catEdit');
-    state.categories.forEach((c, i) => {
+    axis(a).categories.forEach((c, i) => {
       const li = ce.children[i];
-      if (li) li.querySelector('.n').textContent = state.mails.filter((m) => m.cls.categoryId === c.id).length + ' 件';
+      if (li) li.querySelector('.n').textContent = state.mails.filter((m) => m.cls[a].categoryId === c.id).length + ' 件';
     });
     renderDomains();
+  }
+
+  /** SS 名の取り出し設定（xlsx の見出し語） */
+  function renderSsSettings() {
+    const inp = $('ssLabels');
+    if (document.activeElement !== inp) inp.value = state.settings.ssLabels.join(', ');
+    const total = state.mails.filter((m) => !m.error).length;
+    const got = { xlsx: 0, text: 0, manual: 0 };
+    for (const m of state.mails) if (!m.error && m.ss && m.ss.by) got[m.ss.by]++;
+    const none = total - got.xlsx - got.text - got.manual;
+    $('ssStat').textContent = total
+      ? `添付 xlsx から ${got.xlsx} 件 / 件名・本文から ${got.text} 件 / 手で入力 ${got.manual} 件 / 不明 ${none} 件`
+      : 'メールを読み込むと、取り出せた件数が表示されます';
   }
 
   function renderDomains() {
     const tb = $('domainList');
     clear(tb);
     const dom = new Map();
+    const a = state.settingsTab;
     for (const m of state.mails) {
-      if (m.cls.categoryId || m.error) continue;
+      if (m.cls[a].categoryId || m.error) continue;
       const d = (m.from.email.split('@')[1] || '').toLowerCase();
       if (!d) continue;
       dom.set(d, (dom.get(d) || 0) + 1);
@@ -2591,20 +3126,149 @@ body.with-detail .list .snip { display: none; }
     for (const [d, n] of top) {
       const sel = el('select', { 'aria-label': d + ' のカテゴリ', onchange: (ev) => {
         if (!ev.target.value) return;
-        state.rules.push({ id: Cls.newId('r-'), categoryId: ev.target.value, enabled: true, conditions: [{ field: 'fromDomain', op: 'equals', value: d }] });
+        axis(a).rules.push({ id: Cls.newId('r-'), categoryId: ev.target.value, enabled: true, conditions: [{ field: 'fromDomain', op: 'equals', value: d }] });
         settingsChanged(true);
       } });
-      catOptions(sel, '→ カテゴリを選んでルール化', '');
+      catOptions(sel, '→ カテゴリを選んでルール化', '', a);
       tb.appendChild(el('tr', null, [el('td', { text: d }), el('td', { class: 'n', text: n + ' 件' }), el('td', null, sel)]));
     }
   }
 
+  // ---------- 集計 ----------
+
+  function summaryRows() {
+    const rows = filteredMails(true).filter((m) => !m.error);
+    return state.sumIncExcluded ? rows : rows.filter((m) => !isExcluded(m));
+  }
+  const keyName = (id, a) => (id === NONE ? '未分類' : (catById(id, a) || { name: '?' }).name);
+
+  /** 集計からの移動: 今の絞り込みを残したまま、クリックした条件を足して一覧へ（件数が集計と一致する） */
+  function drill(patch) {
+    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded });
+    state.mode = 'list';
+    state.page = 0;
+    syncFilterInputs();
+    render();
+  }
+  function syncFilterInputs() {
+    $('hideExcl').checked = state.filter.hideExcl;
+    $('q').value = state.filter.q; $('fromQ').value = state.filter.from;
+    $('dateFrom').value = state.filter.dateFrom; $('dateTo').value = state.filter.dateTo; $('attQ').value = state.filter.att;
+  }
+  const mainKeyToFilter = (id) => (id === NONE ? 'none' : id);
+
+  function heat(n, max) {
+    if (!n || !max) return '';
+    return `background: color-mix(in srgb, var(--accent) ${Math.round(8 + (n / max) * 62)}%, white);` + (n / max > 0.55 ? 'color:#fff;' : '');
+  }
+  function bar(n, max) {
+    return el('div', { class: 'bar' }, el('span', { style: `width:${max ? Math.max(2, Math.round((n / max) * 100)) : 0}%` }));
+  }
+  function csvButton(label, fileBase, tableFn) {
+    return el('button', { class: 'btn small', type: 'button', onclick: () => download(`${fileBase}-${stamp()}.csv`, Sum.tableToCsv(tableFn()), 'text/csv;charset=utf-8') }, label);
+  }
+
+  function renderSummary() {
+    const box = $('summary');
+    clear(box);
+    const rows = summaryRows();
+    const mainCats = axis('main').categories.filter((c) => state.sumIncExcluded || !c.exclude);
+    const subCats = axis('sub').categories;
+    const excludedN = filteredMails(true).filter((m) => !m.error && isExcluded(m)).length;
+
+    box.appendChild(el('div', { class: 'sum-head' }, [
+      el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。']),
+      el('label', null, [el('input', { type: 'checkbox', checked: state.sumIncExcluded, onchange: (ev) => { state.sumIncExcluded = ev.target.checked; render(); } }),
+        `「書き出しから外す」カテゴリも含める（${excludedN} 件）`])
+    ]));
+    if (!rows.length) { box.appendChild(el('p', { class: 'note', text: '集計するメールがありません。' })); return; }
+
+    // 主×副
+    const mx = Sum.matrix(rows, mainCats, subCats);
+    const t1 = el('table', { class: 'sum-table matrix' });
+    t1.appendChild(el('thead', null, el('tr', null, [el('th', { class: 'corner', text: '主 ＼ 副' }),
+      ...mx.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'sub') })), el('th', { class: 'tot', text: '合計' })])));
+    const tb1 = el('tbody');
+    for (const r of mx.rows) {
+      const tr = el('tr', null, el('th', { class: 'rowh' }, el('button', { type: 'button', class: 'link', onclick: () => drill({ cat: mainKeyToFilter(r) }) }, keyName(r, 'main'))));
+      for (const c of mx.cols) {
+        const n = mx.cells[r][c];
+        tr.appendChild(el('td', { class: 'num', style: heat(n, mx.max) }, n ? el('button', { type: 'button', class: 'link num', title: `${keyName(r, 'main')} × ${keyName(c, 'sub')}`,
+          onclick: () => drill({ cat: mainKeyToFilter(r), sub: c }) }, String(n)) : el('span', { class: 'zero', text: '·' })));
+      }
+      tr.appendChild(el('td', { class: 'num tot', text: String(mx.rowTotal[r]) }));
+      tb1.appendChild(tr);
+    }
+    const ft = el('tr', { class: 'foot' }, el('th', { text: '合計' }));
+    for (const c of mx.cols) ft.appendChild(el('td', { class: 'num tot' }, mx.colTotal[c] ? el('button', { type: 'button', class: 'link num', onclick: () => drill({ sub: c }) }, String(mx.colTotal[c])) : '0'));
+    ft.appendChild(el('td', { class: 'num tot', text: String(mx.total) }));
+    tb1.appendChild(ft);
+    t1.appendChild(tb1);
+    const matrixCsv = () => [['主 ＼ 副', ...mx.cols.map((c) => keyName(c, 'sub')), '合計'],
+      ...mx.rows.map((r) => [keyName(r, 'main'), ...mx.cols.map((c) => mx.cells[r][c]), mx.rowTotal[r]]),
+      ['合計', ...mx.cols.map((c) => mx.colTotal[c]), mx.total]];
+    box.appendChild(section('主カテゴリ × 副カテゴリ', '件数が多いマスほど濃く表示しています。', t1, csvButton('CSV で書き出す', '集計_主x副', matrixCsv)));
+
+    // 月別
+    const mo = Sum.monthly(rows, mainCats);
+    const t2 = el('table', { class: 'sum-table' });
+    t2.appendChild(el('thead', null, el('tr', null, [el('th', { text: '月' }), ...mo.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
+    const tb2 = el('tbody');
+    for (const r of mo.rows) {
+      const isDate = /^\d{4}-\d{2}$/.test(r.month);
+      const go = () => {
+        if (!isDate) return;
+        const [y, m] = r.month.split('-').map(Number);
+        const last = new Date(y, m, 0).getDate();
+        drill({ dateFrom: `${r.month}-01`, dateTo: `${r.month}-${String(last).padStart(2, '0')}` });
+      };
+      const label = isDate ? r.month.replace('-', '年') + '月' : r.month;
+      tb2.appendChild(el('tr', null, [
+        el('th', { class: 'rowh' }, isDate && r.total ? el('button', { type: 'button', class: 'link', onclick: go }, label) : label),
+        ...mo.cols.map((c) => el('td', { class: 'num', text: r.counts[c] ? String(r.counts[c]) : '·' })),
+        el('td', { class: 'num tot', text: String(r.total) }),
+        el('td', { class: 'barc' }, bar(r.total, mo.max))
+      ]));
+    }
+    t2.appendChild(tb2);
+    const monthCsv = () => [['月', ...mo.cols.map((c) => keyName(c, 'main')), '合計'], ...mo.rows.map((r) => [r.month, ...mo.cols.map((c) => r.counts[c]), r.total])];
+    box.appendChild(section('月別の推移（主カテゴリ別）', 'メールの送信日（無ければ受信日）で数えています。月をクリックすると、その月の一覧へ移ります。', t2, csvButton('CSV で書き出す', '集計_月別', monthCsv)));
+
+    // SS 別
+    const ss = Sum.bySs(rows, mainCats);
+    const t3 = el('table', { class: 'sum-table' });
+    t3.appendChild(el('thead', null, el('tr', null, [el('th', { text: 'SS' }), ...ss.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
+    const tb3 = el('tbody');
+    for (const r of ss.rows) {
+      tb3.appendChild(el('tr', null, [
+        el('th', { class: 'rowh' }, el('button', { type: 'button', class: 'link' + (r.ss === Sum.NO_SS ? ' muted' : ''), onclick: () => drill({ ss: r.ss }) }, r.ss)),
+        ...ss.cols.map((c) => el('td', { class: 'num', text: r.counts[c] ? String(r.counts[c]) : '·' })),
+        el('td', { class: 'num tot', text: String(r.total) }),
+        el('td', { class: 'barc' }, bar(r.total, ss.max))
+      ]));
+    }
+    t3.appendChild(tb3);
+    const ssCsv = () => [['SS', ...ss.cols.map((c) => keyName(c, 'main')), '合計'], ...ss.rows.map((r) => [r.ss, ...ss.cols.map((c) => r.counts[c]), r.total])];
+    const noSs = ss.rows.find((r) => r.ss === Sum.NO_SS);
+    box.appendChild(section('SS 別', `SS 名は添付 xlsx の「SS名」欄、無ければ件名・本文から取っています。${noSs ? `取り出せなかった ${noSs.total} 件は「${Sum.NO_SS}」にまとめています（詳細画面で入力できます）。` : ''}`, t3, csvButton('CSV で書き出す', '集計_SS別', ssCsv)));
+  }
+
+  function section(title, note, table, action) {
+    return el('section', { class: 'sum-sec' }, [
+      el('div', { class: 'sum-sec-head' }, [el('h3', { text: title }), action]),
+      el('p', { class: 'note', text: note }),
+      el('div', { class: 'sum-wrap' }, table)
+    ]);
+  }
+
   // ---------- 書き出し ----------
+
+  function isExcluded(m) { const c = catById(m.cls.main.categoryId, 'main'); return !!(c && c.exclude); }
 
   function exportRows(scope, incExcluded) {
     let rows = scope === 'all' ? state.mails.slice() : scope === 'selected' ? state.view.filter((m) => state.selected.has(m.id)) : state.view.slice();
     if (scope === 'selected' && rows.length < state.selected.size) rows = state.mails.filter((m) => state.selected.has(m.id));
-    if (!incExcluded) rows = rows.filter((m) => { const c = catById(m.cls.categoryId); return !(c && c.exclude); });
+    if (!incExcluded) rows = rows.filter((m) => !isExcluded(m));
     return rows;
   }
   function updateExportCount() {
@@ -2622,9 +3286,9 @@ body.with-detail .list .snip { display: none; }
     const rows = exportRows(scope, $('incExcluded').checked);
     if (!rows.length) { $('exportCount').textContent = '書き出すメールがありません'; return; }
     const name = 'mails-' + stamp();
-    if (fmt === 'csv') download(name + '.csv', Exp.toCsv(rows, catName, byName), 'text/csv;charset=utf-8');
-    else if (fmt === 'json') download(name + '.json', Exp.toJson(rows, catName), 'application/json');
-    else download(name + '.html', Exp.toHtml(rows, catName, state.categories.map((c) => c.name).concat('未分類')), 'text/html;charset=utf-8');
+    if (fmt === 'csv') download(name + '.csv', Exp.toCsv(rows, EXPORT_INFO), 'text/csv;charset=utf-8');
+    else if (fmt === 'json') download(name + '.json', Exp.toJson(rows, EXPORT_INFO), 'application/json');
+    else download(name + '.html', Exp.toHtml(rows, EXPORT_INFO, axis('main').categories.map((c) => c.name).concat('未分類')), 'text/html;charset=utf-8');
   }
 
   // ---------- イベント ----------
@@ -2666,11 +3330,16 @@ body.with-detail .list .snip { display: none; }
     $('dateFrom').addEventListener('change', setFilter('dateFrom'));
     $('dateTo').addEventListener('change', setFilter('dateTo'));
     $('attQ').addEventListener('change', setFilter('att'));
+    $('subQ').addEventListener('change', setFilter('sub'));
+    $('hideExcl').addEventListener('change', (ev) => { state.filter.hideExcl = ev.target.checked; state.page = 0; render(); });
+    $('ssQ').addEventListener('change', setFilter('ss'));
     $('resetFilter').addEventListener('click', () => {
-      state.filter = { cat: state.filter.cat, q: '', from: '', dateFrom: '', dateTo: '', att: '' };
-      ['q', 'fromQ', 'dateFrom', 'dateTo', 'attQ'].forEach((id) => { $(id).value = ''; });
+      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false };
+      syncFilterInputs();
       state.page = 0; render();
     });
+    $('tabList').addEventListener('click', () => { state.mode = 'list'; render(); });
+    $('tabSummary').addEventListener('click', () => { state.mode = 'summary'; if (state.current != null) closeDetail(); render(); });
 
     for (const th of document.querySelectorAll('th.sort')) {
       th.addEventListener('click', () => {
@@ -2685,27 +3354,33 @@ body.with-detail .list .snip { display: none; }
       for (const m of pageRows) ev.target.checked ? state.selected.add(m.id) : state.selected.delete(m.id);
       renderList(); renderBulk();
     });
+    $('bulkAxis').addEventListener('change', renderBulk);
     $('bulkApply').addEventListener('click', () => {
       const cat = $('bulkCat').value;
+      const a = $('bulkAxis').value;
       if (!cat) return;
-      for (const m of state.mails) if (state.selected.has(m.id)) state.manual[m.key] = cat;
+      for (const m of state.mails) if (state.selected.has(m.id)) setManual(m.key, a, cat);
       state.selected.clear();
       saveSettings(); reclassify(); render();
     });
     $('bulkAuto').addEventListener('click', () => {
-      for (const m of state.mails) if (state.selected.has(m.id)) delete state.manual[m.key];
+      const a = $('bulkAxis').value;
+      for (const m of state.mails) if (state.selected.has(m.id)) setManual(m.key, a, null);
       state.selected.clear();
       saveSettings(); reclassify(); render();
     });
     $('bulkClear').addEventListener('click', () => { state.selected.clear(); render(); });
 
-    $('detailCat').addEventListener('change', (ev) => {
+    const onDetail = (field, get) => (ev) => {
       const m = state.mails.find((x) => x.id === state.current);
       if (!m) return;
-      if (ev.target.value) state.manual[m.key] = ev.target.value; else delete state.manual[m.key];
+      setManual(m.key, field, get(ev));
       saveSettings(); reclassify(); render();
       openDetail(m.id);
-    });
+    };
+    $('detailCat').addEventListener('change', onDetail('main', (ev) => ev.target.value));
+    $('detailSub').addEventListener('change', onDetail('sub', (ev) => ev.target.value));
+    $('detailSs').addEventListener('change', onDetail('ss', (ev) => Fields.normalizeSs(ev.target.value)));
     $('closeDetail').addEventListener('click', closeDetail);
     $('prevMail').addEventListener('click', () => moveDetail(-1));
     $('nextMail').addEventListener('click', () => moveDetail(1));
@@ -2717,21 +3392,27 @@ body.with-detail .list .snip { display: none; }
     });
 
     $('openSettings').addEventListener('click', () => { renderSettings(); $('settings').showModal(); });
+    for (const b of document.querySelectorAll('[data-stab]')) b.addEventListener('click', () => { state.settingsTab = b.dataset.stab; renderSettings(); });
+    $('ssLabels').addEventListener('change', (ev) => {
+      state.settings.ssLabels = ev.target.value.split(/[,、，]/).map((x) => x.trim()).filter(Boolean);
+      settingsChanged(true);
+    });
     $('addCat').addEventListener('click', () => {
-      state.categories.push({ id: Cls.newId('c-'), name: '新しいカテゴリ', color: PALETTE[state.categories.length % PALETTE.length], exclude: false });
+      const cats = axis(state.settingsTab).categories;
+      cats.push({ id: Cls.newId(state.settingsTab === 'sub' ? 's-' : 'c-'), name: '新しいカテゴリ', color: PALETTE[cats.length % PALETTE.length], exclude: false });
       settingsChanged(true);
       const inputs = $('catEdit').querySelectorAll('input.name');
       const last = inputs[inputs.length - 1];
       if (last) { last.focus(); last.select(); }
     });
     $('addRule').addEventListener('click', () => {
-      state.rules.push({ id: Cls.newId('r-'), categoryId: '', enabled: true, conditions: [{ field: 'any', op: 'contains', value: '' }] });
+      axis(state.settingsTab).rules.push({ id: Cls.newId('r-'), categoryId: '', enabled: true, conditions: [{ field: 'any', op: 'contains', value: '' }] });
       settingsChanged(true);
       const vals = $('ruleEdit').querySelectorAll('input.val');
       if (vals.length) vals[vals.length - 1].focus();
     });
     $('exportSettings').addEventListener('click', () => {
-      download('msg-settings-' + stamp() + '.json', JSON.stringify({ version: 1, categories: state.categories, rules: state.rules, manual: state.manual }, null, 2), 'application/json');
+      download('msg-settings-' + stamp() + '.json', JSON.stringify(Object.assign({}, state.settings, { manual: state.manual }), null, 2), 'application/json');
     });
     $('importSettings').addEventListener('change', async (ev) => {
       const f = ev.target.files[0];
@@ -2739,16 +3420,18 @@ body.with-detail .list .snip { display: none; }
       if (!f) return;
       try {
         const s = JSON.parse(await f.text());
-        if (!Array.isArray(s.categories) || !Array.isArray(s.rules)) throw new Error('設定ファイルの形式が違います');
-        state.categories = s.categories; state.rules = s.rules; state.manual = s.manual || {};
+        if (!(s && (s.axes || Array.isArray(s.categories)))) throw new Error('設定ファイルの形式が違います');
+        const r = Cls.migrate(s, s.manual || {});
+        state.settings = r.settings; state.manual = r.manual;
         settingsChanged(true);
       } catch (e) {
         $('domainList').parentElement.insertAdjacentElement('afterend', el('p', { class: 'note err', text: '読み込めませんでした: ' + e.message }));
       }
     });
     $('resetSettings').addEventListener('click', () => {
-      const d = Cls.defaults();
-      state.categories = d.categories; state.rules = d.rules;
+      const keep = state.settings.ssLabels;
+      state.settings = Cls.defaults();
+      state.settings.ssLabels = keep;
       settingsChanged(true);
     });
 

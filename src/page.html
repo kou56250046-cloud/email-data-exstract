@@ -32,29 +32,42 @@
 
 <div class="layout">
   <aside class="side">
-    <h2>カテゴリ</h2>
+    <h2>主カテゴリ</h2>
     <ul class="cats" id="catList"></ul>
     <p class="note">ファイルは端末の中で読むだけで、外部へは送信しません。</p>
   </aside>
 
   <main class="main">
+    <div class="viewtabs" role="tablist" aria-label="表示の切り替え">
+      <button class="vtab on" id="tabList" type="button" role="tab" aria-selected="true">一覧</button>
+      <button class="vtab" id="tabSummary" type="button" role="tab" aria-selected="false">集計</button>
+    </div>
     <div class="filters">
       <input type="search" id="q" placeholder="件名・本文・送信者・添付名で検索" aria-label="検索">
+      <select id="subQ" aria-label="副カテゴリで絞り込み"></select>
+      <select id="ssQ" aria-label="SS で絞り込み"></select>
       <input type="search" id="fromQ" placeholder="送信者" aria-label="送信者で絞り込み">
       <label>期間 <input type="date" id="dateFrom" aria-label="開始日"> 〜 <input type="date" id="dateTo" aria-label="終了日"></label>
       <select id="attQ" aria-label="添付">
         <option value="">添付: すべて</option>
         <option value="yes">添付あり</option>
         <option value="no">添付なし</option>
+        <option value="pdf">PDF あり</option>
+        <option value="pdfonly">PDF あり（xlsx なし）</option>
       </select>
+      <label class="chk-inline" title="主カテゴリで「書き出しから外す」にしたもの（初期設定では対象外）を一覧に出しません"><input type="checkbox" id="hideExcl"> 対象外を隠す</label>
       <button class="btn ghost small" id="resetFilter" type="button">条件を消す</button>
     </div>
 
     <div class="bulk" id="bulk" hidden>
       <span id="selCount"></span>
+      <select id="bulkAxis" aria-label="変える軸">
+        <option value="main">主カテゴリを</option>
+        <option value="sub">副カテゴリを</option>
+      </select>
       <select id="bulkCat" aria-label="付けるカテゴリ"></select>
       <button class="btn small primary" id="bulkApply" type="button">にする</button>
-      <button class="btn small" id="bulkAuto" type="button">自動分類に戻す</button>
+      <button class="btn small" id="bulkAuto" type="button">この軸を自動分類に戻す</button>
       <button class="btn small ghost" id="bulkClear" type="button">選択を解除</button>
     </div>
 
@@ -80,14 +93,21 @@
       </table>
       <div class="pager" id="pager"></div>
     </div>
+
+    <div class="summary" id="summary" hidden></div>
   </main>
 
   <section class="detail" id="detail" hidden aria-label="メールの詳細">
     <div class="detail-head">
       <button class="btn small ghost" id="prevMail" type="button" title="前のメール (k)">↑</button>
       <button class="btn small ghost" id="nextMail" type="button" title="次のメール (j)">↓</button>
-      <select id="detailCat" aria-label="このメールのカテゴリ"></select>
+      <span class="sp"></span>
       <button class="btn small ghost close" id="closeDetail" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div class="detail-cls">
+      <select id="detailCat" aria-label="このメールの主カテゴリ"></select>
+      <select id="detailSub" aria-label="このメールの副カテゴリ"></select>
+      <input type="text" id="detailSs" aria-label="このメールの SS 名" placeholder="SS 名">
     </div>
     <div class="detail-body" id="detailBody"></div>
   </section>
@@ -96,22 +116,33 @@
 <dialog id="settings" class="dlg wide">
   <form method="dialog" class="dlg-head"><h2>分類の設定</h2><button class="btn small ghost" aria-label="閉じる">×</button></form>
   <div class="dlg-body">
-    <section>
+    <div class="stabs" role="tablist" aria-label="設定の種類">
+      <button class="vtab on" type="button" role="tab" data-stab="main">主カテゴリ（業務の段階）</button>
+      <button class="vtab" type="button" role="tab" data-stab="sub">副カテゴリ（設備・工種）</button>
+      <button class="vtab" type="button" role="tab" data-stab="ss">SS 名の取り出し</button>
+    </div>
+    <section id="secCats">
       <h3>カテゴリ</h3>
-      <p class="note">「書き出しから外す」にしたカテゴリは、書き出し時に既定で除外されます。</p>
+      <p class="note" id="catHelp"></p>
       <ul class="catedit" id="catEdit"></ul>
       <button class="btn small" id="addCat" type="button">＋ カテゴリを追加</button>
     </section>
-    <section>
+    <section id="secRules">
       <h3>自動分類のルール</h3>
       <p class="note">上から順に調べ、最初に当てはまったルールのカテゴリを付けます。1つのルールに条件を複数入れると「すべて満たす」になります。手で付けたカテゴリはルールより優先されます。</p>
       <ol class="rules" id="ruleEdit"></ol>
       <button class="btn small" id="addRule" type="button">＋ ルールを追加</button>
     </section>
-    <section>
+    <section id="secDomains">
       <h3>よく来る送信者ドメイン</h3>
       <p class="note">未分類のメールが多い順です。カテゴリを選ぶとドメインのルールを追加します。</p>
       <table class="domains"><tbody id="domainList"></tbody></table>
+    </section>
+    <section id="secSs" hidden>
+      <h3>SS 名の取り出し</h3>
+      <p class="note">添付 xlsx で、次の見出しの右隣のセルを SS 名として使います（<code>,</code> 区切り。上にあるものから順に探します）。見つからなければ、件名・本文の「○○SS」「○○給油所」の形から取ります。取れないメールは詳細画面で入力できます。</p>
+      <input type="text" id="ssLabels" class="wide-input" aria-label="SS 名の見出し語">
+      <p class="note" id="ssStat"></p>
     </section>
     <section>
       <h3>設定の保存・移行</h3>
@@ -150,10 +181,11 @@
       <a href="#h-load">1. 読み込む</a>
       <a href="#h-view">2. 見る・探す</a>
       <a href="#h-class">3. 分類する</a>
-      <a href="#h-export">4. 書き出す</a>
-      <a href="#h-ai">5. AI に渡すとき</a>
-      <a href="#h-data">6. データの扱い</a>
-      <a href="#h-trouble">7. うまくいかないとき</a>
+      <a href="#h-sum">4. 集計する</a>
+      <a href="#h-export">5. 書き出す</a>
+      <a href="#h-ai">6. AI に渡すとき</a>
+      <a href="#h-data">7. データの扱い</a>
+      <a href="#h-trouble">8. うまくいかないとき</a>
     </nav>
 
     <section id="h-load">
@@ -172,29 +204,49 @@
       <ul>
         <li>一覧の行をクリックすると、右側に詳細が開きます。<kbd>↑</kbd><kbd>↓</kbd>（または <kbd>k</kbd><kbd>j</kbd>）で前後のメールへ移れ、<kbd>Esc</kbd> で閉じます。</li>
         <li>詳細では、宛先（To / Cc / Bcc）・送受信日時・本文・添付を確認できます。本文は「見たまま（HTML）」と「テキスト」を切り替えられます。</li>
-        <li>添付の <b>xlsx</b> は「表を見る」で中身を表示できます。<b>画像</b>は縮小表示され、クリックで拡大します。どの添付も「保存」で取り出せます。</li>
+        <li>添付の <b>xlsx</b> は「表を見る」で中身を表示できます。<b>PDF</b> は「PDF を表示」で中身を見られます（表示されない場合は「新しいタブで開く」）。<b>画像</b>は縮小表示され、クリックで拡大します。どの添付も「保存」で取り出せます。</li>
         <li>転送されたメール（メールの中のメール）は、「添付メール」を開くと中身まで見られます。</li>
         <li>上の検索欄は、件名・本文・送信者・宛先・添付ファイル名・<b>添付 xlsx の中身</b>をまとめて探します。空白で区切ると「すべてを含む」で絞り込みます。全角と半角、大文字と小文字の違いは区別しません。</li>
-        <li>送信者・期間・添付の有無でも絞り込めます。一覧の「日時」「送信者」「件名」をクリックすると並べ替えます。</li>
+        <li>副カテゴリ・SS・送信者・期間・添付の有無でも絞り込めます。添付の「PDF あり（xlsx なし）」は、FAX の PDF しか付いていないメール（文字を読めないので手で分類が必要なもの）をまとめて探すときに使います。</li>
+        <li>一覧の「日時」「送信者」「件名」をクリックすると並べ替えます。</li>
       </ul>
     </section>
 
     <section id="h-class">
       <h3>3. 分類する</h3>
+      <p>1 通のメールに、次の 2 つのカテゴリと SS 名が付きます。</p>
       <ul>
-        <li>読み込むと、「分類の設定」のルールに従って自動で分類されます。ルールは上から順に調べ、最初に当てはまったものが使われます。</li>
-        <li>はじめは「対象外（パスワード・自動通知）」「補修依頼」「見積・請求」「完了報告」「その他」が入っています。名前・色・並び順は自由に変えられます。</li>
+        <li><b>主カテゴリ（業務の段階）</b>: 対象外（パスワード・自動通知）/ 補修依頼 / 見積 / 発注 / 完了報告 / 請求 / その他</li>
+        <li><b>副カテゴリ（設備・工種）</b>: 計量機 / 洗車機 / 看板・照明 / POS・電気 / タンク・配管 / 空調・コンプレッサー / 建物・舗装 / その他設備。件名・本文に加えて添付 xlsx の中身（「対象設備」欄など）も見て決めます</li>
+        <li><b>SS 名</b>: 添付 xlsx の「SS名」欄の値。無ければ件名・本文の「○○SS」「○○給油所」から取ります</li>
+      </ul>
+      <ul>
+        <li>読み込むと、「分類の設定」のルールに従って軸ごとに自動で分類されます。ルールは上から順に調べ、最初に当てはまったものが使われます。</li>
+        <li>カテゴリの名前・色・並び順・ルールは、「分類の設定」の上のタブ（主カテゴリ / 副カテゴリ / SS 名の取り出し）で軸ごとに変えられます。</li>
         <li>「補修依頼」「修理依頼」のように言い方が違う場合は、ルールの語を <code>,</code> で区切って並べます（例: <code>補修, 修理, 修繕</code>）。どれか 1 つでも含まれれば当てはまります。</li>
         <li>詳細画面に「どの語で分類されたか」が出ます。間違って分類されていたら、その語をルールから外すか、より上に別のルールを置いてください。</li>
-        <li><b>1 件だけ直す</b>: 詳細画面の上にあるカテゴリ欄で選び直します。「自動分類」を選ぶとルールによる分類に戻ります。</li>
-        <li><b>まとめて直す</b>: 一覧のチェックボックスで選び、上に出る欄でカテゴリを選んで「にする」を押します。</li>
+        <li><b>1 件だけ直す</b>: 詳細画面の上にある主・副の欄で選び直します。「自動」を選ぶとルールによる分類に戻ります。SS 名は右の欄に入力します（空にすると自動に戻ります）。</li>
+        <li><b>まとめて直す</b>: 一覧のチェックボックスで選び、上に出る欄で「主カテゴリを / 副カテゴリを」とカテゴリを選んで「にする」を押します。</li>
+        <li>FAX の PDF しか付いていないメールは中身の文字を読めないため、件名・本文だけで分類されます。添付の絞り込みで「PDF あり（xlsx なし）」を選び、PDF を見ながら手で直してください。</li>
         <li>手で付けたカテゴリには「手」の印が付き、ルールより優先されます。</li>
         <li>「分類の設定」の「よく来る送信者ドメイン」から、送信元の会社ごとのルールを簡単に作れます。</li>
       </ul>
     </section>
 
+    <section id="h-sum">
+      <h3>4. 集計する</h3>
+      <ul>
+        <li>一覧の上の「集計」タブで切り替えます。左の主カテゴリ・上の絞り込み条件（期間・SS など）がそのままかかります。「書き出しから外す」カテゴリ（対象外）は、チェックを入れない限り数えません。</li>
+        <li><b>主カテゴリ × 副カテゴリ</b>: 件数と行・列の合計。件数が多いマスほど濃く表示します。</li>
+        <li><b>月別の推移</b>: 月ごとの件数を主カテゴリ別に並べ、合計を横棒で示します。</li>
+        <li><b>SS 別</b>: SS ごとの件数を主カテゴリ別に、多い順で並べます。SS 名が取れなかったメールは「（SS 不明）」にまとめます。</li>
+        <li>数字・月・SS 名をクリックすると、そのメールの一覧へ移ります。</li>
+        <li>それぞれの表の「CSV で書き出す」で、Excel に貼れる形で保存できます。</li>
+      </ul>
+    </section>
+
     <section id="h-export">
-      <h3>4. 書き出す</h3>
+      <h3>5. 書き出す</h3>
       <p>「書き出し」から、対象（絞り込み中 / 選択中 / すべて）と形式を選びます。「書き出しから外す」にしたカテゴリ（初期設定では「対象外」）は、チェックを入れない限り含まれません。</p>
       <div class="help-table-wrap">
         <table class="help-table">
@@ -204,13 +256,13 @@
           <tbody>
             <tr>
               <th>CSV（Excel）</th>
-              <td>1 通 = 1 行の表。カテゴリ・分類方法・送受信日時・送信者・To / Cc / Bcc・件名・本文・添付ファイル名・添付 xlsx の内容・重要度・Message-ID・元ファイル名など 19 列。</td>
+              <td>1 通 = 1 行の表。主カテゴリ・副カテゴリ・SS名・分類方法・送受信日時・送信者・To / Cc / Bcc・件名・本文・添付ファイル名・添付PDF・添付 xlsx の内容・重要度・Message-ID・元ファイル名など 22 列。</td>
               <td>Excel で<b>並べ替え・フィルタ・集計</b>する。スタンド別・月別の件数を数える、一覧表として台帳に貼る。</td>
               <td>本文は 32,000 文字で切り詰め。<code>=</code> などで始まる値は数式にならないよう先頭に <code>'</code> を付けます。</td>
             </tr>
             <tr>
               <th>閲覧用 HTML</th>
-              <td>カテゴリ別の目次つき 1 ファイル。1 通ずつ件名・送信者・日時・宛先・添付名・本文を並べます。添付 xlsx の内容は折りたたみで表示。</td>
+              <td>主カテゴリ別の目次つき 1 ファイル。1 通ずつ件名・副カテゴリ・SS・送信者・日時・宛先・添付名・本文を並べます。添付 xlsx の内容は折りたたみで表示。</td>
               <td>ブラウザで<b>ざっと読む</b>、<b>印刷して回覧</b>する、Outlook を持たない人に共有する。</td>
               <td>集計には不向き。本文は文字だけ（画像・装飾は含みません）。</td>
             </tr>
@@ -223,11 +275,11 @@
           </tbody>
         </table>
       </div>
-      <p class="note">どの形式にも、添付ファイルそのもの（画像・PDF など）は含まれません。xlsx だけはセルの文字をテキストにして入れます（1 通あたり最大 5 万文字）。添付が必要なときは詳細画面から保存してください。</p>
+      <p class="note">どの形式にも、添付ファイルそのもの（画像・PDF など）は含まれません。xlsx だけはセルの文字をテキストにして入れます（1 通あたり最大 5 万文字）。FAX の PDF は画像のため文字は入りません。添付が必要なときは詳細画面から保存してください。集計表の CSV は「集計」タブから書き出します。</p>
     </section>
 
     <section id="h-ai">
-      <h3>5. AI に渡すとき</h3>
+      <h3>6. AI に渡すとき</h3>
       <ul>
         <li><b>JSON がおすすめ</b>です。項目の区切りがはっきりしていて、本文の切り詰めや文字の付け足しがありません。</li>
         <li>件数が多いと一度に渡せる量を超えます。左のカテゴリ（例: 補修依頼だけ）や期間で絞り込んでから「絞り込み中」で書き出し、何回かに分けて渡してください。</li>
@@ -237,7 +289,7 @@
     </section>
 
     <section id="h-data">
-      <h3>6. データの扱い</h3>
+      <h3>7. データの扱い</h3>
       <ul>
         <li>.msg ファイルはこのパソコンの中で読むだけで、<b>外部へは一切送信しません</b>。メール本文の外部画像も読み込みません。</li>
         <li>メールの中身は保存しません。画面を閉じると一覧は消えるので、次回はもう一度フォルダを読み込んでください。</li>
@@ -248,10 +300,12 @@
     </section>
 
     <section id="h-trouble">
-      <h3>7. うまくいかないとき</h3>
+      <h3>8. うまくいかないとき</h3>
       <ul>
         <li><b>文字化けする</b>: 「テキスト」と「見たまま（HTML）」を切り替えてみてください。それでも化ける場合は、そのメールの送信元を控えてご相談ください。</li>
         <li><b>分類がおかしい</b>: 詳細画面で「どの語で分類されたか」を確認し、「分類の設定」でその語を直します。</li>
+        <li><b>SS 名が取れない・違う</b>: 「分類の設定」→「SS 名の取り出し」で、xlsx の見出し語（例: 店舗名）を足します。個別には詳細画面の SS 欄に入力します。</li>
+        <li><b>PDF の中身で分類されない</b>: FAX の PDF は画像なので文字を読めません。手で分類してください。</li>
         <li><b>xlsx が表示されない</b>: 古い形式の <code>.xls</code>（Excel 2003 以前）は表示できません。「保存」して Excel 等で開いてください。Word・PDF の中身も表示しません。</li>
         <li><b>動作が重い</b>: 一覧を 100 件ずつ表示しています。絞り込みを使うと軽くなります。</li>
       </ul>
@@ -264,6 +318,8 @@
 <script src="js/msg.js"></script>
 <script src="js/xlsx.js"></script>
 <script src="js/classify.js"></script>
+<script src="js/fields.js"></script>
+<script src="js/summary.js"></script>
 <script src="js/store.js"></script>
 <script src="js/export.js"></script>
 <script src="js/app.js"></script>

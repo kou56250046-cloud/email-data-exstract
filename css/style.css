@@ -212,3 +212,58 @@ body.with-detail .list .snip { display: none; }
 .help-table thead th { background: #f1f3f5; color: var(--sub); font-weight: normal; white-space: nowrap; }
 .help-table tbody th { white-space: nowrap; background: #fff8f0; }
 .help-table td:nth-child(3) { background: #f4fbf6; }
+
+/* 一覧 / 集計の切り替え、設定のタブ */
+.viewtabs, .stabs { display: flex; gap: 2px; padding: 8px 14px 0; background: var(--panel); }
+.stabs { padding: 0 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.vtab { font: inherit; padding: 6px 16px; border: 1px solid var(--line); border-bottom: 0; background: #f1f3f5; color: var(--sub); border-radius: 6px 6px 0 0; cursor: pointer; }
+.stabs .vtab { border-bottom: 1px solid var(--line); border-radius: 6px; }
+.vtab.on { background: var(--panel); color: var(--ink); font-weight: bold; box-shadow: inset 0 3px 0 var(--accent); }
+.vtab:focus-visible { outline: 2px solid var(--accent); }
+.filters select { max-width: 180px; }
+
+/* 一覧の 2 軸 */
+.list .cat { width: 170px; }
+.list .catstack { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.chip.sub { font-size: 11px; padding: 1px 7px 1px 5px; background: #fff; border: 1px solid color-mix(in srgb, var(--c, #adb5bd) 45%, white); }
+.chip.none.sub { border-color: var(--line); }
+.list .ss { font-size: 11.5px; color: var(--sub); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .ss::before { content: "SS "; color: #adb5bd; }
+.list .att .xl.pdf { background: #fff4e6; color: #d9480f; }
+
+/* 詳細の 2 軸 */
+.detail-head .sp { flex: 1; }
+.detail-cls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: #fcfcfd; }
+.detail-cls select, .detail-cls input { min-width: 0; width: 100%; }
+.why .ax { display: inline-block; width: 2.2em; color: var(--sub); font-size: 11px; }
+.pdfview { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: var(--radius); margin: 6px 0; background: #525659; }
+.wide-input { width: 100%; }
+
+/* 集計 */
+.summary { flex: 1; overflow: auto; padding: 14px 18px 40px; }
+.summary[hidden] { display: none; }
+.sum-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+.sum-head p { margin: 0; }
+.sum-head label { font-size: 12.5px; color: var(--sub); }
+.sum-sec { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 14px 0; }
+.sum-sec-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sum-sec-head h3 { margin: 0; }
+.sum-wrap { overflow: auto; max-height: 520px; }
+.sum-table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+.sum-table th, .sum-table td { border: 1px solid var(--line); padding: 5px 8px; }
+.sum-table thead th { position: sticky; top: 0; background: #f1f3f5; color: var(--sub); font-weight: normal; z-index: 1; }
+.sum-table .colh { min-width: 64px; font-size: 12px; }
+.sum-table .rowh { text-align: left; white-space: nowrap; font-weight: normal; background: #fafbfc; position: sticky; left: 0; }
+.sum-table .corner { position: sticky; left: 0; z-index: 2; }
+.sum-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sum-table .tot { font-weight: bold; background: #f8f9fa; }
+.sum-table .foot th { background: #f1f3f5; text-align: left; }
+.sum-table .zero { color: #ced4da; }
+.sum-table .barh { width: 160px; }
+.sum-table .barc { width: 160px; }
+.sum-table .bar { height: 10px; background: #f1f3f5; border-radius: 5px; overflow: hidden; }
+.sum-table .bar span { display: block; height: 100%; background: var(--accent); }
+.link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px; }
+.link:hover { text-decoration-color: currentColor; }
+.link.num { font-variant-numeric: tabular-nums; }
+.link.muted { color: var(--sub); }

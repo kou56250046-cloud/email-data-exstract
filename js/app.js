@@ -11,16 +11,20 @@
   const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
 
   const Msg = window.MsgParser, Cls = window.MsgClassify, Store = window.MsgStore, Exp = window.MsgExport, Xlsx = window.MsgXlsx;
+  const Fields = window.MsgFields, Sum = window.MsgSummary;
+  const NONE = Sum.NONE;
   const $ = (id) => document.getElementById(id);
   const PAGE = 100;
   const MAX_XLSX_TEXT = 50000;
 
   const state = {
     mails: [],
-    categories: [],
-    rules: [],
-    manual: {},
-    filter: { cat: 'all', q: '', from: '', dateFrom: '', dateTo: '', att: '' },
+    settings: Cls.defaults(), // { axes: { main, sub }, ssLabels }
+    manual: {},               // key -> { main?, sub?, ss? }
+    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false },
+    mode: 'list',             // 'list' | 'summary'
+    settingsTab: 'main',      // 'main' | 'sub' | 'ss'
+    sumIncExcluded: false,
     sort: { key: 'date', dir: -1 },
     page: 0,
     selected: new Set(),
@@ -111,18 +115,25 @@
   function saveSettings() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      Store.set('settings', { version: 1, categories: state.categories, rules: state.rules });
+      Store.set('settings', state.settings);
       Store.set('manual', state.manual);
     }, 300);
   }
   async function loadSettings() {
-    const s = await Store.get('settings');
-    const m = await Store.get('manual');
-    if (s && s.categories) { state.categories = s.categories; state.rules = s.rules || []; }
-    else { const d = Cls.defaults(); state.categories = d.categories; state.rules = d.rules; }
-    state.manual = m || {};
+    const r = Cls.migrate(await Store.get('settings'), await Store.get('manual'));
+    state.settings = r.settings;
+    state.manual = r.manual;
+    if (r.migrated) saveSettings(); // 1 軸の設定を主カテゴリへ移したので保存し直す
   }
-  const catById = (id) => state.categories.find((c) => c.id === id) || null;
+  const axis = (a) => state.settings.axes[a];
+  const catById = (id, a = 'main') => axis(a).categories.find((c) => c.id === id) || null;
+
+  /** 手直しを 1 項目だけ変える。value が空なら消す */
+  function setManual(key, field, value) {
+    const cur = Object.assign({}, state.manual[key] || {});
+    if (value) cur[field] = value; else delete cur[field];
+    if (Object.keys(cur).length) state.manual[key] = cur; else delete state.manual[key];
+  }
 
   // ---------- 読み込み ----------
 
@@ -231,23 +242,42 @@
 
   // ---------- 分類 ----------
 
+  const EMPTY_CLS = { categoryId: null, by: null, ruleId: null, hits: [] };
+
+  function classifyAxis(m, a, manualId) {
+    if (manualId && !catById(manualId, a)) manualId = null; // 消したカテゴリの手直しは無視する
+    const r = m.error
+      ? (manualId ? { categoryId: manualId, by: 'manual', ruleId: null, hits: [] } : EMPTY_CLS)
+      : Cls.classify(m, axis(a).rules, manualId);
+    return r.categoryId && !catById(r.categoryId, a) ? EMPTY_CLS : r;
+  }
+
   function reclassify() {
     const keyCount = new Map();
     for (const m of state.mails) keyCount.set(m.key, (keyCount.get(m.key) || 0) + 1);
     for (const m of state.mails) {
       m.dup = keyCount.get(m.key) > 1;
-      if (m.error) { m.cls = { categoryId: state.manual[m.key] || null, by: state.manual[m.key] ? 'manual' : null, hits: [] }; continue; }
-      m.cls = Cls.classify(m, state.rules, state.manual);
-      if (m.cls.categoryId && !catById(m.cls.categoryId)) m.cls = { categoryId: null, by: null, hits: [] };
+      const man = state.manual[m.key] || {};
+      m.cls = { main: classifyAxis(m, 'main', man.main), sub: classifyAxis(m, 'sub', man.sub) };
+      if (man.ss) m.ss = { name: Fields.normalizeSs(man.ss), by: 'manual' };
+      else {
+        if (!m._ssAuto) m._ssAuto = m.error ? { name: '', by: null } : Fields.extractSs(m, state.settings.ssLabels);
+        m.ss = m._ssAuto;
+      }
     }
   }
 
-  function catName(m) { const c = m.cls && catById(m.cls.categoryId); return c ? c.name : '未分類'; }
+  function catName(m, a = 'main') { const c = m.cls && catById(m.cls[a].categoryId, a); return c ? c.name : '未分類'; }
   function byName(m) {
-    if (!m.cls || !m.cls.by) return '';
-    if (m.cls.by === 'manual') return '手動';
-    return 'ルール' + (m.cls.hits && m.cls.hits.length ? '（' + m.cls.hits.join('・') + '）' : '');
+    const one = (a, label) => {
+      const c = m.cls[a];
+      if (!c.by) return '';
+      if (c.by === 'manual') return label + ': 手動';
+      return label + ': ルール' + (c.hits && c.hits.length ? '（' + c.hits.join('・') + '）' : '');
+    };
+    return [one('main', '主'), one('sub', '副')].filter(Boolean).join(' / ');
   }
+  const EXPORT_INFO = { main: (m) => catName(m, 'main'), sub: (m) => catName(m, 'sub'), ss: (m) => (m.ss && m.ss.name) || '', by: byName };
 
   // ---------- 絞り込み・並べ替え ----------
 
@@ -260,16 +290,24 @@
     return m._search;
   }
 
-  function computeView() {
-    const f = state.filter;
+  const hasPdf = (m) => m.attachments.some(Exp.isPdf);
+  const hasXlsx = (m) => m.attachments.some(Xlsx.isXlsx);
+
+  /** 絞り込み条件に合うメール（並べ替え前）。集計画面でも使う */
+  function filteredMails(ignoreHideExcl) {
+    const f = Object.assign({}, state.filter, ignoreHideExcl ? { hideExcl: false } : null);
     const q = Cls.norm(f.q).length ? f.q.split(/[\s　]+/).map(Cls.norm).filter(Boolean) : [];
     const fq = Cls.norm(f.from);
     const dFrom = f.dateFrom ? new Date(f.dateFrom + 'T00:00:00').getTime() : null;
     const dTo = f.dateTo ? new Date(f.dateTo + 'T23:59:59.999').getTime() : null;
-    const list = state.mails.filter((m) => {
+    return state.mails.filter((m) => {
       if (f.cat === 'error') { if (!m.error) return false; }
-      else if (f.cat === 'none') { if (m.cls.categoryId) return false; }
-      else if (f.cat !== 'all' && m.cls.categoryId !== f.cat) return false;
+      else if (f.cat === 'none') { if (m.cls.main.categoryId || m.error) return false; } // 読めなかったファイルは未分類に入れない
+      else if (f.cat !== 'all' && m.cls.main.categoryId !== f.cat) return false;
+      if (f.sub === NONE) { if (m.cls.sub.categoryId || m.error) return false; }
+      else if (f.sub && m.cls.sub.categoryId !== f.sub) return false;
+      if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss) return false; }
+      if (f.hideExcl && isExcluded(m)) return false;
       if (q.length) { const s = searchText(m); if (!q.every((w) => s.includes(w))) return false; }
       if (fq && !Cls.norm(m.from.name + ' ' + m.from.email).includes(fq)) return false;
       if (dFrom != null || dTo != null) {
@@ -279,12 +317,18 @@
         if (dFrom != null && t < dFrom) return false;
         if (dTo != null && t > dTo) return false;
       }
-      if (f.att) {
+      if (f.att === 'pdfonly') { if (!hasPdf(m) || hasXlsx(m)) return false; }
+      else if (f.att === 'pdf') { if (!hasPdf(m)) return false; }
+      else if (f.att) {
         const has = m.attachments.some((a) => !a.hidden);
         if ((f.att === 'yes') !== has) return false;
       }
       return true;
     });
+  }
+
+  function computeView() {
+    const list = filteredMails();
     const { key, dir } = state.sort;
     const val = {
       date: (m) => mailDate(m) || '',
@@ -302,16 +346,43 @@
   function render() {
     computeView();
     renderCats();
-    renderList();
-    renderBulk();
+    renderFilterOptions();
     const has = state.mails.length > 0;
+    const sum = state.mode === 'summary';
     $('empty').hidden = has;
-    $('tableWrap').hidden = !has;
+    $('tabList').classList.toggle('on', !sum);
+    $('tabSummary').classList.toggle('on', sum);
+    $('tabList').setAttribute('aria-selected', String(!sum));
+    $('tabSummary').setAttribute('aria-selected', String(sum));
+    $('tableWrap').hidden = !has || sum;
+    $('summary').hidden = !has || !sum;
+    if (sum) { $('bulk').hidden = true; renderSummary(); }
+    else { renderList(); renderBulk(); }
   }
 
-  function catChip(c, by) {
-    if (!c) return el('span', { class: 'chip none', text: '未分類' });
-    return el('span', { class: 'chip', style: `--c:${c.color}`, title: by === 'manual' ? '手で付けたカテゴリ' : 'ルールで付いたカテゴリ' },
+  /** 副カテゴリと SS の絞り込み欄の選択肢を作り直す */
+  function renderFilterOptions() {
+    const subSel = $('subQ');
+    const keepSub = state.filter.sub;
+    clear(subSel);
+    subSel.appendChild(el('option', { value: '' }, '副カテゴリ: すべて'));
+    for (const c of axis('sub').categories) subSel.appendChild(el('option', { value: c.id, selected: c.id === keepSub }, c.name));
+    subSel.appendChild(el('option', { value: NONE, selected: keepSub === NONE }, '（未分類）'));
+
+    const ssSel = $('ssQ');
+    const keepSs = state.filter.ss;
+    const counts = new Map();
+    for (const m of state.mails) { const n = (m.ss && m.ss.name) || Sum.NO_SS; counts.set(n, (counts.get(n) || 0) + 1); }
+    const names = [...counts.keys()].sort((a, b) => (a === Sum.NO_SS) - (b === Sum.NO_SS) || counts.get(b) - counts.get(a) || (a < b ? -1 : 1));
+    clear(ssSel);
+    ssSel.appendChild(el('option', { value: '' }, 'SS: すべて'));
+    if (keepSs && !counts.has(keepSs)) names.unshift(keepSs);
+    for (const n of names) ssSel.appendChild(el('option', { value: n, selected: n === keepSs }, `${n}（${counts.get(n) || 0}）`));
+  }
+
+  function catChip(c, by, small) {
+    if (!c) return el('span', { class: 'chip none' + (small ? ' sub' : ''), text: '未分類' });
+    return el('span', { class: 'chip' + (small ? ' sub' : ''), style: `--c:${c.color}`, title: by === 'manual' ? '手で付けたカテゴリ' : 'ルールで付いたカテゴリ' },
       [el('i'), c.name, by === 'manual' ? el('b', { class: 'manual', text: '手' }) : null]);
   }
 
@@ -322,8 +393,9 @@
     let none = 0, err = 0;
     for (const m of state.mails) {
       if (m.error) err++;
-      if (m.cls.categoryId) counts.set(m.cls.categoryId, (counts.get(m.cls.categoryId) || 0) + 1);
-      else none++;
+      const id = m.cls.main.categoryId;
+      if (id) counts.set(id, (counts.get(id) || 0) + 1);
+      else if (!m.error) none++;
     }
     const item = (key, label, n, color, extra) => {
       const li = el('li', { class: 'cat' + (state.filter.cat === key ? ' active' : '') + (extra ? ' ' + extra : '') }, [
@@ -334,7 +406,7 @@
       ul.appendChild(li);
     };
     item('all', 'すべて', state.mails.length, null, 'all');
-    for (const c of state.categories) item(c.id, c.name, counts.get(c.id) || 0, c.color, c.exclude ? 'excluded' : '');
+    for (const c of axis('main').categories) item(c.id, c.name, counts.get(c.id) || 0, c.color, c.exclude ? 'excluded' : '');
     item('none', '未分類', none, '#ced4da');
     if (err) item('error', '読めなかったファイル', err, '#e03131', 'err');
   }
@@ -354,7 +426,11 @@
           type: 'checkbox', checked: state.selected.has(m.id), 'aria-label': '選択',
           onchange: (ev) => { ev.target.checked ? state.selected.add(m.id) : state.selected.delete(m.id); renderBulk(); }
         })),
-        el('td', { class: 'cat' }, catChip(catById(m.cls.categoryId), m.cls.by)),
+        el('td', { class: 'cat' }, el('div', { class: 'catstack' }, [
+          catChip(catById(m.cls.main.categoryId, 'main'), m.cls.main.by),
+          catChip(catById(m.cls.sub.categoryId, 'sub'), m.cls.sub.by, true),
+          m.ss && m.ss.name ? el('span', { class: 'ss', text: m.ss.name, title: 'SS 名' + (m.ss.by === 'manual' ? '（手で入力）' : '') }) : null
+        ])),
         el('td', { class: 'date', text: fmtDateShort(mailDate(m)) }),
         el('td', { class: 'from', title: m.from.email || '' }, m.from.name || m.from.email || '（不明）'),
         el('td', { class: 'subject' }, [
@@ -366,7 +442,8 @@
         ]),
         el('td', { class: 'att', title: visibleAtt.map((a) => a.name).join('\n') }, visibleAtt.length ? [
           el('span', { text: '📎' + visibleAtt.length }),
-          visibleAtt.some(Xlsx.isXlsx) ? el('span', { class: 'xl', text: 'xlsx' }) : null
+          visibleAtt.some(Xlsx.isXlsx) ? el('span', { class: 'xl', text: 'xlsx' }) : null,
+          visibleAtt.some(Exp.isPdf) ? el('span', { class: 'xl pdf', text: 'pdf' }) : null
         ] : '')
       ]);
       tb.appendChild(tr);
@@ -392,10 +469,10 @@
     }
   }
 
-  function catOptions(select, withAuto, current) {
+  function catOptions(select, withAuto, current, a = 'main') {
     clear(select);
     if (withAuto) select.appendChild(el('option', { value: '' }, withAuto));
-    for (const c of state.categories) select.appendChild(el('option', { value: c.id, selected: c.id === current }, c.name));
+    for (const c of axis(a).categories) select.appendChild(el('option', { value: c.id, selected: c.id === current }, c.name));
   }
 
   function renderBulk() {
@@ -403,7 +480,7 @@
     $('bulk').hidden = n === 0;
     $('selCount').textContent = `${n} 件を選択中:`;
     const keep = $('bulkCat').value;
-    catOptions($('bulkCat'), null, keep);
+    catOptions($('bulkCat'), null, keep, $('bulkAxis').value);
   }
 
   // ---------- 詳細 ----------
@@ -527,6 +604,22 @@
           if (depth === 0 && list.filter(Xlsx.isXlsx).length === 1) btn.click(); // 1つだけなら最初から開く
           continue;
         }
+        if (Exp.isPdf(a)) {
+          // FAX を PDF にしたものは中身が画像。ブラウザ内蔵の PDF 表示で見る
+          const url = blobUrl(a.data, 'application/pdf');
+          const holder = el('div', { class: 'pdf-holder' });
+          let opened = false;
+          const btn = el('button', { class: 'btn small primary', type: 'button', onclick: () => {
+            if (opened) { clear(holder); opened = false; btn.textContent = 'PDF を表示'; return; }
+            opened = true; btn.textContent = 'PDF を閉じる';
+            holder.appendChild(el('iframe', { class: 'pdfview', src: url, title: a.name }));
+          } }, 'PDF を表示');
+          row.appendChild(btn);
+          row.appendChild(el('a', { class: 'btn small ghost', href: url, target: '_blank', rel: 'noopener' }, '新しいタブで開く'));
+          box.appendChild(row);
+          box.appendChild(holder);
+          continue;
+        }
         if (isImage(a) && !(a.hidden && msg.bodyHtml)) {
           const url = blobUrl(a.data, mimeOf(a));
           thumbs.appendChild(el('a', { href: url, target: '_blank', rel: 'noopener', title: a.name + '（クリックで拡大）' },
@@ -582,18 +675,29 @@
     for (const tr of $('rows').children) tr.classList.remove('current');
     renderList();
 
-    const sel = $('detailCat');
-    const autoRes = m.error ? null : Cls.classify(m, state.rules, {});
-    const autoCat = autoRes && catById(autoRes.categoryId);
-    catOptions(sel, '自動分類' + (autoCat ? `（${autoCat.name}）` : '（未分類）'), m.cls.by === 'manual' ? m.cls.categoryId : '');
+    for (const [a, id] of [['main', 'detailCat'], ['sub', 'detailSub']]) {
+      const autoRes = m.error ? null : Cls.classify(m, axis(a).rules, null);
+      const autoCat = autoRes && catById(autoRes.categoryId, a);
+      catOptions($(id), (a === 'main' ? '主: ' : '副: ') + '自動' + (autoCat ? `（${autoCat.name}）` : '（未分類）'), m.cls[a].by === 'manual' ? m.cls[a].categoryId : '', a);
+    }
+    const ssIn = $('detailSs');
+    ssIn.value = m.ss && m.ss.by === 'manual' ? m.ss.name : '';
+    ssIn.placeholder = m.ss && m.ss.name && m.ss.by !== 'manual' ? `SS: ${m.ss.name}（自動）` : 'SS 名（不明）';
 
     const box = $('detailBody');
     clear(box);
     box.appendChild(el('h2', { class: 'subj', text: m.subject || '（件名なし）' }));
-    const why = m.cls.by === 'manual' ? '手で付けたカテゴリです'
-      : m.cls.by === 'rule' ? `ルールで分類: 「${(m.cls.hits || []).join('」「') || '条件に一致'}」に当てはまりました`
-        : 'どのルールにも当てはまりませんでした';
-    box.appendChild(el('p', { class: 'why' }, [catChip(catById(m.cls.categoryId), m.cls.by), ' ', why]));
+    const why = (a) => {
+      const c = m.cls[a];
+      return c.by === 'manual' ? '手で付けたカテゴリです'
+        : c.by === 'rule' ? `ルールで分類: 「${(c.hits || []).join('」「') || '条件に一致'}」に当てはまりました`
+          : 'どのルールにも当てはまりませんでした';
+    };
+    box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: '主' }), catChip(catById(m.cls.main.categoryId, 'main'), m.cls.main.by), ' ', why('main')]));
+    box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: '副' }), catChip(catById(m.cls.sub.categoryId, 'sub'), m.cls.sub.by, true), ' ', why('sub')]));
+    const ssWhy = !m.ss || !m.ss.name ? '取り出せませんでした（上の欄に入力できます）'
+      : m.ss.by === 'manual' ? '手で入力した名前です' : m.ss.by === 'xlsx' ? '添付 xlsx の見出しの隣から取りました' : '件名・本文から取りました';
+    box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: 'SS' }), el('b', { text: (m.ss && m.ss.name) || '—' }), ' ', ssWhy]));
     box.appendChild(el('p', { class: 'file', text: '元ファイル: ' + (m.path || m.fileName) + '（' + fmtSize(m.size) + '）' }));
     if (m.error) { box.appendChild(el('p', { class: 'note err', text: 'このファイルは読み取れませんでした: ' + m.error })); return; }
 
@@ -640,7 +744,7 @@
 
   function settingsChanged(full) {
     saveSettings();
-    for (const m of state.mails) m._norm = null; // ルールの対象が変わる可能性があるので正規化の覚えを捨てる
+    for (const m of state.mails) { m._norm = null; m._ssAuto = null; } // ルールや見出し語が変わるので覚えを捨てる
     reclassify();
     render();
     if (full) renderSettings();
@@ -650,22 +754,36 @@
   const PALETTE = ['#d9480f', '#1971c2', '#2f9e44', '#7048e8', '#c2255c', '#e67700', '#0c8599', '#5c940d', '#8a8f98'];
 
   function renderSettings() {
+    const tab = state.settingsTab;
+    for (const b of document.querySelectorAll('[data-stab]')) {
+      b.classList.toggle('on', b.dataset.stab === tab);
+      b.setAttribute('aria-selected', String(b.dataset.stab === tab));
+    }
+    for (const id of ['secCats', 'secRules', 'secDomains']) $(id).hidden = tab === 'ss';
+    $('secSs').hidden = tab !== 'ss';
+    if (tab === 'ss') { renderSsSettings(); return; }
+    const a = tab;
+    const ax = axis(a);
+    $('catHelp').textContent = a === 'main'
+      ? '業務の段階で分けます。「書き出しから外す」にしたカテゴリは、書き出しと集計で既定で除外されます。'
+      : '設備・工種で分けます。1 通に 1 つ付きます。';
+
     // カテゴリ
     const ce = $('catEdit');
     clear(ce);
-    state.categories.forEach((c, i) => {
-      const used = state.mails.filter((m) => m.cls.categoryId === c.id).length;
+    ax.categories.forEach((c, i) => {
+      const used = state.mails.filter((m) => m.cls[a].categoryId === c.id).length;
       ce.appendChild(el('li', null, [
         el('input', { type: 'color', value: c.color, 'aria-label': '色', onchange: (ev) => { c.color = ev.target.value; settingsChanged(); } }),
         el('input', { type: 'text', value: c.name, class: 'name', 'aria-label': 'カテゴリ名', onchange: (ev) => { c.name = ev.target.value.trim() || c.name; settingsChanged(true); } }),
-        el('label', { class: 'excl' }, [el('input', { type: 'checkbox', checked: !!c.exclude, onchange: (ev) => { c.exclude = ev.target.checked; settingsChanged(); } }), '書き出しから外す']),
+        a === 'main' ? el('label', { class: 'excl' }, [el('input', { type: 'checkbox', checked: !!c.exclude, onchange: (ev) => { c.exclude = ev.target.checked; settingsChanged(); } }), '書き出しから外す']) : null,
         el('span', { class: 'n', text: used + ' 件' }),
-        el('button', { class: 'btn small ghost', type: 'button', title: '上へ', disabled: i === 0, onclick: () => { state.categories.splice(i - 1, 0, state.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
-        el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === state.categories.length - 1, onclick: () => { state.categories.splice(i + 1, 0, state.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
+        el('button', { class: 'btn small ghost', type: 'button', title: '上へ', disabled: i === 0, onclick: () => { ax.categories.splice(i - 1, 0, ax.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
+        el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === ax.categories.length - 1, onclick: () => { ax.categories.splice(i + 1, 0, ax.categories.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
         el('button', { class: 'btn small ghost danger', type: 'button', onclick: () => {
-          state.categories.splice(i, 1);
-          for (const r of state.rules) if (r.categoryId === c.id) r.categoryId = '';
-          for (const k in state.manual) if (state.manual[k] === c.id) delete state.manual[k];
+          ax.categories.splice(i, 1);
+          for (const r of ax.rules) if (r.categoryId === c.id) r.categoryId = '';
+          for (const k in state.manual) if (state.manual[k][a] === c.id) setManual(k, a, null);
           settingsChanged(true);
         } }, '削除')
       ]));
@@ -674,7 +792,7 @@
     // ルール
     const re = $('ruleEdit');
     clear(re);
-    state.rules.forEach((r, i) => {
+    ax.rules.forEach((r, i) => {
       const conds = el('div', { class: 'conds' });
       r.conditions.forEach((c, j) => {
         const fieldSel = el('select', { 'aria-label': '対象', onchange: (ev) => { c.field = ev.target.value; settingsChanged(true); } });
@@ -697,15 +815,15 @@
       });
       const catSel = el('select', { 'aria-label': 'カテゴリ', onchange: (ev) => { r.categoryId = ev.target.value; settingsChanged(); } });
       catSel.appendChild(el('option', { value: '' }, '（カテゴリを選ぶ）'));
-      for (const c of state.categories) catSel.appendChild(el('option', { value: c.id, selected: r.categoryId === c.id }, c.name));
+      for (const c of ax.categories) catSel.appendChild(el('option', { value: c.id, selected: r.categoryId === c.id }, c.name));
       re.appendChild(el('li', { class: 'rule' + (r.enabled ? '' : ' off') }, [
         el('div', { class: 'rule-head' }, [
           el('label', null, [el('input', { type: 'checkbox', checked: r.enabled, onchange: (ev) => { r.enabled = ev.target.checked; settingsChanged(true); } }), '有効']),
           el('span', { class: 'rule-count', 'data-rule': r.id }),
           el('span', { class: 'sp' }),
-          el('button', { class: 'btn small ghost', type: 'button', title: '上へ（先に評価）', disabled: i === 0, onclick: () => { state.rules.splice(i - 1, 0, state.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
-          el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === state.rules.length - 1, onclick: () => { state.rules.splice(i + 1, 0, state.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
-          el('button', { class: 'btn small ghost danger', type: 'button', onclick: () => { state.rules.splice(i, 1); settingsChanged(true); } }, '削除')
+          el('button', { class: 'btn small ghost', type: 'button', title: '上へ（先に評価）', disabled: i === 0, onclick: () => { ax.rules.splice(i - 1, 0, ax.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↑'),
+          el('button', { class: 'btn small ghost', type: 'button', title: '下へ', disabled: i === ax.rules.length - 1, onclick: () => { ax.rules.splice(i + 1, 0, ax.rules.splice(i, 1)[0]); settingsChanged(true); } }, '↓'),
+          el('button', { class: 'btn small ghost danger', type: 'button', onclick: () => { ax.rules.splice(i, 1); settingsChanged(true); } }, '削除')
         ]),
         conds,
         el('div', { class: 'rule-foot' }, [
@@ -722,23 +840,39 @@
   function debounceSettings() { clearTimeout(settingsTimer); settingsTimer = setTimeout(() => settingsChanged(), 400); }
 
   function renderRuleCounts() {
+    const a = state.settingsTab;
+    if (a === 'ss') { renderSsSettings(); return; }
     const counts = {};
-    for (const m of state.mails) if (m.cls.by === 'rule') counts[m.cls.ruleId] = (counts[m.cls.ruleId] || 0) + 1;
+    for (const m of state.mails) if (m.cls[a].by === 'rule') counts[m.cls[a].ruleId] = (counts[m.cls[a].ruleId] || 0) + 1;
     for (const s of document.querySelectorAll('.rule-count')) s.textContent = `このルールで ${counts[s.dataset.rule] || 0} 件`;
     const ce = $('catEdit');
-    state.categories.forEach((c, i) => {
+    axis(a).categories.forEach((c, i) => {
       const li = ce.children[i];
-      if (li) li.querySelector('.n').textContent = state.mails.filter((m) => m.cls.categoryId === c.id).length + ' 件';
+      if (li) li.querySelector('.n').textContent = state.mails.filter((m) => m.cls[a].categoryId === c.id).length + ' 件';
     });
     renderDomains();
+  }
+
+  /** SS 名の取り出し設定（xlsx の見出し語） */
+  function renderSsSettings() {
+    const inp = $('ssLabels');
+    if (document.activeElement !== inp) inp.value = state.settings.ssLabels.join(', ');
+    const total = state.mails.filter((m) => !m.error).length;
+    const got = { xlsx: 0, text: 0, manual: 0 };
+    for (const m of state.mails) if (!m.error && m.ss && m.ss.by) got[m.ss.by]++;
+    const none = total - got.xlsx - got.text - got.manual;
+    $('ssStat').textContent = total
+      ? `添付 xlsx から ${got.xlsx} 件 / 件名・本文から ${got.text} 件 / 手で入力 ${got.manual} 件 / 不明 ${none} 件`
+      : 'メールを読み込むと、取り出せた件数が表示されます';
   }
 
   function renderDomains() {
     const tb = $('domainList');
     clear(tb);
     const dom = new Map();
+    const a = state.settingsTab;
     for (const m of state.mails) {
-      if (m.cls.categoryId || m.error) continue;
+      if (m.cls[a].categoryId || m.error) continue;
       const d = (m.from.email.split('@')[1] || '').toLowerCase();
       if (!d) continue;
       dom.set(d, (dom.get(d) || 0) + 1);
@@ -748,20 +882,149 @@
     for (const [d, n] of top) {
       const sel = el('select', { 'aria-label': d + ' のカテゴリ', onchange: (ev) => {
         if (!ev.target.value) return;
-        state.rules.push({ id: Cls.newId('r-'), categoryId: ev.target.value, enabled: true, conditions: [{ field: 'fromDomain', op: 'equals', value: d }] });
+        axis(a).rules.push({ id: Cls.newId('r-'), categoryId: ev.target.value, enabled: true, conditions: [{ field: 'fromDomain', op: 'equals', value: d }] });
         settingsChanged(true);
       } });
-      catOptions(sel, '→ カテゴリを選んでルール化', '');
+      catOptions(sel, '→ カテゴリを選んでルール化', '', a);
       tb.appendChild(el('tr', null, [el('td', { text: d }), el('td', { class: 'n', text: n + ' 件' }), el('td', null, sel)]));
     }
   }
 
+  // ---------- 集計 ----------
+
+  function summaryRows() {
+    const rows = filteredMails(true).filter((m) => !m.error);
+    return state.sumIncExcluded ? rows : rows.filter((m) => !isExcluded(m));
+  }
+  const keyName = (id, a) => (id === NONE ? '未分類' : (catById(id, a) || { name: '?' }).name);
+
+  /** 集計からの移動: 今の絞り込みを残したまま、クリックした条件を足して一覧へ（件数が集計と一致する） */
+  function drill(patch) {
+    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded });
+    state.mode = 'list';
+    state.page = 0;
+    syncFilterInputs();
+    render();
+  }
+  function syncFilterInputs() {
+    $('hideExcl').checked = state.filter.hideExcl;
+    $('q').value = state.filter.q; $('fromQ').value = state.filter.from;
+    $('dateFrom').value = state.filter.dateFrom; $('dateTo').value = state.filter.dateTo; $('attQ').value = state.filter.att;
+  }
+  const mainKeyToFilter = (id) => (id === NONE ? 'none' : id);
+
+  function heat(n, max) {
+    if (!n || !max) return '';
+    return `background: color-mix(in srgb, var(--accent) ${Math.round(8 + (n / max) * 62)}%, white);` + (n / max > 0.55 ? 'color:#fff;' : '');
+  }
+  function bar(n, max) {
+    return el('div', { class: 'bar' }, el('span', { style: `width:${max ? Math.max(2, Math.round((n / max) * 100)) : 0}%` }));
+  }
+  function csvButton(label, fileBase, tableFn) {
+    return el('button', { class: 'btn small', type: 'button', onclick: () => download(`${fileBase}-${stamp()}.csv`, Sum.tableToCsv(tableFn()), 'text/csv;charset=utf-8') }, label);
+  }
+
+  function renderSummary() {
+    const box = $('summary');
+    clear(box);
+    const rows = summaryRows();
+    const mainCats = axis('main').categories.filter((c) => state.sumIncExcluded || !c.exclude);
+    const subCats = axis('sub').categories;
+    const excludedN = filteredMails(true).filter((m) => !m.error && isExcluded(m)).length;
+
+    box.appendChild(el('div', { class: 'sum-head' }, [
+      el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。']),
+      el('label', null, [el('input', { type: 'checkbox', checked: state.sumIncExcluded, onchange: (ev) => { state.sumIncExcluded = ev.target.checked; render(); } }),
+        `「書き出しから外す」カテゴリも含める（${excludedN} 件）`])
+    ]));
+    if (!rows.length) { box.appendChild(el('p', { class: 'note', text: '集計するメールがありません。' })); return; }
+
+    // 主×副
+    const mx = Sum.matrix(rows, mainCats, subCats);
+    const t1 = el('table', { class: 'sum-table matrix' });
+    t1.appendChild(el('thead', null, el('tr', null, [el('th', { class: 'corner', text: '主 ＼ 副' }),
+      ...mx.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'sub') })), el('th', { class: 'tot', text: '合計' })])));
+    const tb1 = el('tbody');
+    for (const r of mx.rows) {
+      const tr = el('tr', null, el('th', { class: 'rowh' }, el('button', { type: 'button', class: 'link', onclick: () => drill({ cat: mainKeyToFilter(r) }) }, keyName(r, 'main'))));
+      for (const c of mx.cols) {
+        const n = mx.cells[r][c];
+        tr.appendChild(el('td', { class: 'num', style: heat(n, mx.max) }, n ? el('button', { type: 'button', class: 'link num', title: `${keyName(r, 'main')} × ${keyName(c, 'sub')}`,
+          onclick: () => drill({ cat: mainKeyToFilter(r), sub: c }) }, String(n)) : el('span', { class: 'zero', text: '·' })));
+      }
+      tr.appendChild(el('td', { class: 'num tot', text: String(mx.rowTotal[r]) }));
+      tb1.appendChild(tr);
+    }
+    const ft = el('tr', { class: 'foot' }, el('th', { text: '合計' }));
+    for (const c of mx.cols) ft.appendChild(el('td', { class: 'num tot' }, mx.colTotal[c] ? el('button', { type: 'button', class: 'link num', onclick: () => drill({ sub: c }) }, String(mx.colTotal[c])) : '0'));
+    ft.appendChild(el('td', { class: 'num tot', text: String(mx.total) }));
+    tb1.appendChild(ft);
+    t1.appendChild(tb1);
+    const matrixCsv = () => [['主 ＼ 副', ...mx.cols.map((c) => keyName(c, 'sub')), '合計'],
+      ...mx.rows.map((r) => [keyName(r, 'main'), ...mx.cols.map((c) => mx.cells[r][c]), mx.rowTotal[r]]),
+      ['合計', ...mx.cols.map((c) => mx.colTotal[c]), mx.total]];
+    box.appendChild(section('主カテゴリ × 副カテゴリ', '件数が多いマスほど濃く表示しています。', t1, csvButton('CSV で書き出す', '集計_主x副', matrixCsv)));
+
+    // 月別
+    const mo = Sum.monthly(rows, mainCats);
+    const t2 = el('table', { class: 'sum-table' });
+    t2.appendChild(el('thead', null, el('tr', null, [el('th', { text: '月' }), ...mo.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
+    const tb2 = el('tbody');
+    for (const r of mo.rows) {
+      const isDate = /^\d{4}-\d{2}$/.test(r.month);
+      const go = () => {
+        if (!isDate) return;
+        const [y, m] = r.month.split('-').map(Number);
+        const last = new Date(y, m, 0).getDate();
+        drill({ dateFrom: `${r.month}-01`, dateTo: `${r.month}-${String(last).padStart(2, '0')}` });
+      };
+      const label = isDate ? r.month.replace('-', '年') + '月' : r.month;
+      tb2.appendChild(el('tr', null, [
+        el('th', { class: 'rowh' }, isDate && r.total ? el('button', { type: 'button', class: 'link', onclick: go }, label) : label),
+        ...mo.cols.map((c) => el('td', { class: 'num', text: r.counts[c] ? String(r.counts[c]) : '·' })),
+        el('td', { class: 'num tot', text: String(r.total) }),
+        el('td', { class: 'barc' }, bar(r.total, mo.max))
+      ]));
+    }
+    t2.appendChild(tb2);
+    const monthCsv = () => [['月', ...mo.cols.map((c) => keyName(c, 'main')), '合計'], ...mo.rows.map((r) => [r.month, ...mo.cols.map((c) => r.counts[c]), r.total])];
+    box.appendChild(section('月別の推移（主カテゴリ別）', 'メールの送信日（無ければ受信日）で数えています。月をクリックすると、その月の一覧へ移ります。', t2, csvButton('CSV で書き出す', '集計_月別', monthCsv)));
+
+    // SS 別
+    const ss = Sum.bySs(rows, mainCats);
+    const t3 = el('table', { class: 'sum-table' });
+    t3.appendChild(el('thead', null, el('tr', null, [el('th', { text: 'SS' }), ...ss.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
+    const tb3 = el('tbody');
+    for (const r of ss.rows) {
+      tb3.appendChild(el('tr', null, [
+        el('th', { class: 'rowh' }, el('button', { type: 'button', class: 'link' + (r.ss === Sum.NO_SS ? ' muted' : ''), onclick: () => drill({ ss: r.ss }) }, r.ss)),
+        ...ss.cols.map((c) => el('td', { class: 'num', text: r.counts[c] ? String(r.counts[c]) : '·' })),
+        el('td', { class: 'num tot', text: String(r.total) }),
+        el('td', { class: 'barc' }, bar(r.total, ss.max))
+      ]));
+    }
+    t3.appendChild(tb3);
+    const ssCsv = () => [['SS', ...ss.cols.map((c) => keyName(c, 'main')), '合計'], ...ss.rows.map((r) => [r.ss, ...ss.cols.map((c) => r.counts[c]), r.total])];
+    const noSs = ss.rows.find((r) => r.ss === Sum.NO_SS);
+    box.appendChild(section('SS 別', `SS 名は添付 xlsx の「SS名」欄、無ければ件名・本文から取っています。${noSs ? `取り出せなかった ${noSs.total} 件は「${Sum.NO_SS}」にまとめています（詳細画面で入力できます）。` : ''}`, t3, csvButton('CSV で書き出す', '集計_SS別', ssCsv)));
+  }
+
+  function section(title, note, table, action) {
+    return el('section', { class: 'sum-sec' }, [
+      el('div', { class: 'sum-sec-head' }, [el('h3', { text: title }), action]),
+      el('p', { class: 'note', text: note }),
+      el('div', { class: 'sum-wrap' }, table)
+    ]);
+  }
+
   // ---------- 書き出し ----------
+
+  function isExcluded(m) { const c = catById(m.cls.main.categoryId, 'main'); return !!(c && c.exclude); }
 
   function exportRows(scope, incExcluded) {
     let rows = scope === 'all' ? state.mails.slice() : scope === 'selected' ? state.view.filter((m) => state.selected.has(m.id)) : state.view.slice();
     if (scope === 'selected' && rows.length < state.selected.size) rows = state.mails.filter((m) => state.selected.has(m.id));
-    if (!incExcluded) rows = rows.filter((m) => { const c = catById(m.cls.categoryId); return !(c && c.exclude); });
+    if (!incExcluded) rows = rows.filter((m) => !isExcluded(m));
     return rows;
   }
   function updateExportCount() {
@@ -779,9 +1042,9 @@
     const rows = exportRows(scope, $('incExcluded').checked);
     if (!rows.length) { $('exportCount').textContent = '書き出すメールがありません'; return; }
     const name = 'mails-' + stamp();
-    if (fmt === 'csv') download(name + '.csv', Exp.toCsv(rows, catName, byName), 'text/csv;charset=utf-8');
-    else if (fmt === 'json') download(name + '.json', Exp.toJson(rows, catName), 'application/json');
-    else download(name + '.html', Exp.toHtml(rows, catName, state.categories.map((c) => c.name).concat('未分類')), 'text/html;charset=utf-8');
+    if (fmt === 'csv') download(name + '.csv', Exp.toCsv(rows, EXPORT_INFO), 'text/csv;charset=utf-8');
+    else if (fmt === 'json') download(name + '.json', Exp.toJson(rows, EXPORT_INFO), 'application/json');
+    else download(name + '.html', Exp.toHtml(rows, EXPORT_INFO, axis('main').categories.map((c) => c.name).concat('未分類')), 'text/html;charset=utf-8');
   }
 
   // ---------- イベント ----------
@@ -823,11 +1086,16 @@
     $('dateFrom').addEventListener('change', setFilter('dateFrom'));
     $('dateTo').addEventListener('change', setFilter('dateTo'));
     $('attQ').addEventListener('change', setFilter('att'));
+    $('subQ').addEventListener('change', setFilter('sub'));
+    $('hideExcl').addEventListener('change', (ev) => { state.filter.hideExcl = ev.target.checked; state.page = 0; render(); });
+    $('ssQ').addEventListener('change', setFilter('ss'));
     $('resetFilter').addEventListener('click', () => {
-      state.filter = { cat: state.filter.cat, q: '', from: '', dateFrom: '', dateTo: '', att: '' };
-      ['q', 'fromQ', 'dateFrom', 'dateTo', 'attQ'].forEach((id) => { $(id).value = ''; });
+      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false };
+      syncFilterInputs();
       state.page = 0; render();
     });
+    $('tabList').addEventListener('click', () => { state.mode = 'list'; render(); });
+    $('tabSummary').addEventListener('click', () => { state.mode = 'summary'; if (state.current != null) closeDetail(); render(); });
 
     for (const th of document.querySelectorAll('th.sort')) {
       th.addEventListener('click', () => {
@@ -842,27 +1110,33 @@
       for (const m of pageRows) ev.target.checked ? state.selected.add(m.id) : state.selected.delete(m.id);
       renderList(); renderBulk();
     });
+    $('bulkAxis').addEventListener('change', renderBulk);
     $('bulkApply').addEventListener('click', () => {
       const cat = $('bulkCat').value;
+      const a = $('bulkAxis').value;
       if (!cat) return;
-      for (const m of state.mails) if (state.selected.has(m.id)) state.manual[m.key] = cat;
+      for (const m of state.mails) if (state.selected.has(m.id)) setManual(m.key, a, cat);
       state.selected.clear();
       saveSettings(); reclassify(); render();
     });
     $('bulkAuto').addEventListener('click', () => {
-      for (const m of state.mails) if (state.selected.has(m.id)) delete state.manual[m.key];
+      const a = $('bulkAxis').value;
+      for (const m of state.mails) if (state.selected.has(m.id)) setManual(m.key, a, null);
       state.selected.clear();
       saveSettings(); reclassify(); render();
     });
     $('bulkClear').addEventListener('click', () => { state.selected.clear(); render(); });
 
-    $('detailCat').addEventListener('change', (ev) => {
+    const onDetail = (field, get) => (ev) => {
       const m = state.mails.find((x) => x.id === state.current);
       if (!m) return;
-      if (ev.target.value) state.manual[m.key] = ev.target.value; else delete state.manual[m.key];
+      setManual(m.key, field, get(ev));
       saveSettings(); reclassify(); render();
       openDetail(m.id);
-    });
+    };
+    $('detailCat').addEventListener('change', onDetail('main', (ev) => ev.target.value));
+    $('detailSub').addEventListener('change', onDetail('sub', (ev) => ev.target.value));
+    $('detailSs').addEventListener('change', onDetail('ss', (ev) => Fields.normalizeSs(ev.target.value)));
     $('closeDetail').addEventListener('click', closeDetail);
     $('prevMail').addEventListener('click', () => moveDetail(-1));
     $('nextMail').addEventListener('click', () => moveDetail(1));
@@ -874,21 +1148,27 @@
     });
 
     $('openSettings').addEventListener('click', () => { renderSettings(); $('settings').showModal(); });
+    for (const b of document.querySelectorAll('[data-stab]')) b.addEventListener('click', () => { state.settingsTab = b.dataset.stab; renderSettings(); });
+    $('ssLabels').addEventListener('change', (ev) => {
+      state.settings.ssLabels = ev.target.value.split(/[,、，]/).map((x) => x.trim()).filter(Boolean);
+      settingsChanged(true);
+    });
     $('addCat').addEventListener('click', () => {
-      state.categories.push({ id: Cls.newId('c-'), name: '新しいカテゴリ', color: PALETTE[state.categories.length % PALETTE.length], exclude: false });
+      const cats = axis(state.settingsTab).categories;
+      cats.push({ id: Cls.newId(state.settingsTab === 'sub' ? 's-' : 'c-'), name: '新しいカテゴリ', color: PALETTE[cats.length % PALETTE.length], exclude: false });
       settingsChanged(true);
       const inputs = $('catEdit').querySelectorAll('input.name');
       const last = inputs[inputs.length - 1];
       if (last) { last.focus(); last.select(); }
     });
     $('addRule').addEventListener('click', () => {
-      state.rules.push({ id: Cls.newId('r-'), categoryId: '', enabled: true, conditions: [{ field: 'any', op: 'contains', value: '' }] });
+      axis(state.settingsTab).rules.push({ id: Cls.newId('r-'), categoryId: '', enabled: true, conditions: [{ field: 'any', op: 'contains', value: '' }] });
       settingsChanged(true);
       const vals = $('ruleEdit').querySelectorAll('input.val');
       if (vals.length) vals[vals.length - 1].focus();
     });
     $('exportSettings').addEventListener('click', () => {
-      download('msg-settings-' + stamp() + '.json', JSON.stringify({ version: 1, categories: state.categories, rules: state.rules, manual: state.manual }, null, 2), 'application/json');
+      download('msg-settings-' + stamp() + '.json', JSON.stringify(Object.assign({}, state.settings, { manual: state.manual }), null, 2), 'application/json');
     });
     $('importSettings').addEventListener('change', async (ev) => {
       const f = ev.target.files[0];
@@ -896,16 +1176,18 @@
       if (!f) return;
       try {
         const s = JSON.parse(await f.text());
-        if (!Array.isArray(s.categories) || !Array.isArray(s.rules)) throw new Error('設定ファイルの形式が違います');
-        state.categories = s.categories; state.rules = s.rules; state.manual = s.manual || {};
+        if (!(s && (s.axes || Array.isArray(s.categories)))) throw new Error('設定ファイルの形式が違います');
+        const r = Cls.migrate(s, s.manual || {});
+        state.settings = r.settings; state.manual = r.manual;
         settingsChanged(true);
       } catch (e) {
         $('domainList').parentElement.insertAdjacentElement('afterend', el('p', { class: 'note err', text: '読み込めませんでした: ' + e.message }));
       }
     });
     $('resetSettings').addEventListener('click', () => {
-      const d = Cls.defaults();
-      state.categories = d.categories; state.rules = d.rules;
+      const keep = state.settings.ssLabels;
+      state.settings = Cls.defaults();
+      state.settings.ssLabels = keep;
       settingsChanged(true);
     });
 

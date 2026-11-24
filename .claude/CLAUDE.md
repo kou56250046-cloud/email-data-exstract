@@ -39,6 +39,7 @@ js/xlsx.js        添付 xlsx の読み取り（表示・検索・分類用）
 js/classify.js    カテゴリ・ルール評価（主・副の 2 軸）、初期設定、v1→v2 の設定移行
 js/fields.js      SS 名の取り出し（xlsx の見出しの隣 → 件名・本文の「○○SS」）
 js/summary.js     集計（主×副・月別・SS 別）と集計表の CSV。画面に依存しない純粋関数
+js/thread.js      再送のまとまりと、依頼メール↔返信メールの紐づけ（In-Reply-To・References → 会話情報）。純粋関数
 js/store.js       IndexedDB（カテゴリ・ルール・手直しだけを保存。本文は保存しない）
 js/export.js      CSV / HTML / JSON 書き出し
 js/app.js         画面

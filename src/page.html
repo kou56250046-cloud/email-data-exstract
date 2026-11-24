@@ -61,6 +61,14 @@
         <option value="uniq">重複は 1 件にまとめる</option>
         <option value="only">重複しているものだけ</option>
       </select>
+      <select id="threadQ" aria-label="再送・返信">
+        <option value="">再送・返信: すべて表示</option>
+        <option value="resend">再送のまとまりだけ</option>
+        <option value="replied">返信と結べた依頼だけ</option>
+        <option value="unreplied">返信の無い依頼だけ</option>
+        <option value="noreply">返信メールを隠す</option>
+        <option value="reply">返信メールだけ</option>
+      </select>
       <label class="chk-inline" title="主カテゴリで「書き出しから外す」にしたもの（初期設定では対象外）を一覧に出しません"><input type="checkbox" id="hideExcl"> 対象外を隠す</label>
       <button class="btn ghost small" id="resetFilter" type="button">条件を消す</button>
     </div>
@@ -188,6 +196,15 @@
       <button class="btn" data-fmt="html" type="button">閲覧用 HTML</button>
       <button class="btn" data-fmt="json" type="button">JSON</button>
     </div>
+    <fieldset>
+      <legend>評価データ: 依頼メールと最初の返信の組</legend>
+      <p class="note" id="pairCount"></p>
+      <div class="exp-buttons">
+        <button class="btn" data-pairs="csv" type="button">組を CSV</button>
+        <button class="btn" data-pairs="json" type="button">組を JSON</button>
+      </div>
+      <p class="note">返信メールの In-Reply-To・References、または Outlook の会話情報で結べたものだけを組にします。再送は最初の送信を依頼として 1 組にまとめます。上の「対象」とは関係なく、読み込んだメール全体から作ります。</p>
+    </fieldset>
     <p class="note">CSV は Excel でそのまま開けます（UTF-8 BOM 付き）。本文が 32,000 文字を超える場合は切り詰めます。添付ファイルの中身は含まれません。詳細画面から個別に保存してください。</p>
   </div>
 </dialog>
@@ -347,6 +364,7 @@
 <script src="js/classify.js"></script>
 <script src="js/fields.js"></script>
 <script src="js/summary.js"></script>
+<script src="js/thread.js"></script>
 <script src="js/report.js"></script>
 <script src="js/store.js"></script>
 <script src="js/zipw.js"></script>

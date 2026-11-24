@@ -169,7 +169,58 @@
     return h.join('\n');
   }
 
-  var api = { isPdf: isPdf, toCsv: toCsv, toJson: toJson, toHtml: toHtml, listBody: listBody, LIST_CSS_SCOPED: LIST_CSS_SCOPED, fmtDate: fmtDate, addrs: addrs, addr: addr, esc: esc };
+  // ---------- 依頼メールと最初の返信の組（評価データ用） ----------
+  // pairs: [{ request, reply, method, resendCount }]（thread.js の analyze が作る）
+
+  var METHOD = { header: 'ヘッダ', conversation: '会話情報' };
+  var PAIR_COLS = [
+    ['依頼の主カテゴリ', function (p, info) { return info.main(p.request); }],
+    ['依頼の副カテゴリ', function (p, info) { return info.sub(p.request); }],
+    ['依頼のSS名', function (p, info) { return info.ss(p.request); }],
+    ['依頼の送信日時', function (p) { return fmtDate(p.request.sentAt || p.request.receivedAt); }],
+    ['依頼の送信者', function (p) { return addr(p.request.from || {}); }],
+    ['依頼の件名', function (p) { return p.request.subject; }],
+    ['依頼の本文', function (p) { return p.request.bodyText; }],
+    ['依頼の添付xlsxの内容', function (p) { return p.request.xlsxText || ''; }],
+    ['依頼の送信回数', function (p) { return p.resendCount; }],
+    ['返信の送信日時', function (p) { return fmtDate(p.reply.sentAt || p.reply.receivedAt); }],
+    ['返信の送信者', function (p) { return addr(p.reply.from || {}); }],
+    ['返信の件名', function (p) { return p.reply.subject; }],
+    ['返信の本文', function (p) { return p.reply.bodyText; }],
+    ['紐づけの手段', function (p) { return METHOD[p.method] || p.method; }],
+    ['依頼のMessage-ID', function (p) { return p.request.messageId; }],
+    ['返信のMessage-ID', function (p) { return p.reply.messageId; }],
+    ['依頼の元ファイル', function (p) { return p.request.path || p.request.fileName; }],
+    ['返信の元ファイル', function (p) { return p.reply.path || p.reply.fileName; }]
+  ];
+
+  function pairsToCsv(pairs, info) {
+    var lines = [PAIR_COLS.map(function (c) { return csvCell(c[0]); }).join(',')];
+    pairs.forEach(function (p) { lines.push(PAIR_COLS.map(function (c) { return csvCell(c[1](p, info)); }).join(',')); });
+    return '﻿' + lines.join('\r\n') + '\r\n';
+  }
+
+  function pairsToJson(pairs, info) {
+    var side = function (m) {
+      return {
+        key: m.key, file: m.path || m.fileName, messageId: m.messageId, subject: m.subject, from: m.from,
+        sentAt: m.sentAt, receivedAt: m.receivedAt, bodyText: m.bodyText, xlsxText: m.xlsxText || ''
+      };
+    };
+    return JSON.stringify({
+      exportedAt: new Date().toISOString(),
+      count: pairs.length,
+      pairs: pairs.map(function (p) {
+        var req = side(p.request);
+        req.mainCategory = info.main(p.request);
+        req.subCategory = info.sub(p.request);
+        req.ss = info.ss(p.request) || null;
+        return { method: p.method, resendCount: p.resendCount, request: req, reply: side(p.reply) };
+      })
+    }, null, 2);
+  }
+
+  var api = { isPdf: isPdf, toCsv: toCsv, toJson: toJson, toHtml: toHtml, pairsToCsv: pairsToCsv, pairsToJson: pairsToJson, listBody: listBody, LIST_CSS_SCOPED: LIST_CSS_SCOPED, fmtDate: fmtDate, addrs: addrs, addr: addr, esc: esc };
   g.MsgExport = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

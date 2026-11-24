@@ -151,6 +151,44 @@ for (let i = 0; i < N; i++) {
   writeFileSync(join(OUT, `mail_${String(i).padStart(4, '0')}.msg`), bytes);
   if (i === 0) writeFileSync(join(OUT, 'sub', 'mail_0000のコピー.msg'), bytes);
 }
+// 再送と返信の組（thread/ に置く）。返信は自社の送信済みアイテムから保存した .msg の想定
+mkdirSync(join(OUT, 'thread'), { recursive: true });
+const hex = (n) => new Uint8Array(n).map(() => Math.floor(rnd() * 256));
+const T = Math.max(4, Math.floor(N / 25));
+let threadFiles = 0;
+const put = (name, spec) => { writeFileSync(join(OUT, 'thread', name), buildMsg(spec)); threadFiles++; };
+for (let t = 0; t < T; t++) {
+  const ss = pick(SS), part = pick(PARTS), issue = pick(ISSUE);
+  const [fn, fe] = pick(SENDERS);
+  const t0 = Date.UTC(2025, 0, 1) + Math.floor(rnd() * 300) * 86400000 + 9 * 3600000;
+  const iso = (d) => new Date(d).toISOString();
+  const head = hex(22);
+  const subject = `${ss} ${part}${issue}の補修依頼`;
+  const body = `保守受付 ご担当者様\r\n\r\n${ss}の${part}に${issue}が発生しました。\r\n対応をお願いします。\r\n\r\n${fn}`;
+  const req = { subject, fromName: fn, fromEmail: fe, to: me, body, sentAt: iso(t0), receivedAt: iso(t0 + 30000),
+    messageId: `<req${t}.${t0}@gs.example>`, conversationIndex: head };
+  put(`t${t}_依頼.msg`, req);
+  const kind = t % 4; // 0: 再送あり 1: 再送＋件名に (1) 2: 再送なし 3: 返信なし
+  let parent = req;
+  if (kind <= 1) {
+    const d = t0 + (1 + Math.floor(rnd() * 3)) * 86400000;
+    const re = { ...req, subject: kind === 0 ? `【再送】${subject}` : `${subject}(1)`, sentAt: iso(d), receivedAt: iso(d + 30000),
+      messageId: `<resend${t}.${d}@gs.example>`, conversationIndex: hex(22) };
+    put(`t${t}_再送.msg`, re);
+    parent = re;
+  }
+  if (kind === 3) continue;
+  const d = Date.parse(parent.sentAt) + (2 + Math.floor(rnd() * 20)) * 3600000;
+  const byIdxOnly = t % 3 === 0; // 一部は In-Reply-To が無く、会話情報だけで結ぶ
+  const idx = new Uint8Array(parent.conversationIndex.length + 5);
+  idx.set(parent.conversationIndex); idx.set(hex(5), parent.conversationIndex.length);
+  put(`t${t}_返信.msg`, { subject: `RE: ${parent.subject}`, fromName: me[0].name, fromEmail: me[0].email, to: [{ name: fn, email: fe }],
+    body: `${fn} 様\r\n\r\n${ss}の${part}の件、承知しました。${1 + Math.floor(rnd() * 5)}日以内に伺います。\r\n\r\n保守受付\r\n\r\n> ${body.replace(/\r\n/g, '\r\n> ')}`,
+    sentAt: iso(d), receivedAt: iso(d), messageId: `<reply${t}.${d}@maintenance.example.jp>`,
+    inReplyTo: byIdxOnly ? undefined : parent.messageId, references: byIdxOnly ? undefined : parent.messageId, conversationIndex: idx });
+}
+console.log(`再送・返信の組を ${OUT}/thread/ に ${threadFiles} 件書き出しました（依頼 ${T} 件）`);
+
 // 壊れたファイルも 1 つ混ぜる
 writeFileSync(join(OUT, 'broken.msg'), 'これは壊れたファイルです');
 console.log(`${N} 件を ${OUT}/ に書き出しました`);

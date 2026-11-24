@@ -11,7 +11,7 @@
   const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
 
   const Msg = window.MsgParser, Cls = window.MsgClassify, Store = window.MsgStore, Exp = window.MsgExport, Xlsx = window.MsgXlsx;
-  const Fields = window.MsgFields, Sum = window.MsgSummary, Rep = window.MsgReport, ZipW = window.MsgZipW;
+  const Fields = window.MsgFields, Sum = window.MsgSummary, Rep = window.MsgReport, ZipW = window.MsgZipW, Thr = window.MsgThread;
   const NONE = Sum.NONE;
   const $ = (id) => document.getElementById(id);
   const PAGE = 100;
@@ -23,7 +23,8 @@
     mails: [],
     settings: Cls.defaults(), // { axes: { main, sub }, ssLabels }
     manual: {},               // key -> { main?, sub?, ss? }
-    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '' },
+    pairs: [],                // 依頼メールと最初の返信の組（読み込むたびに作り直す。保存しない）
+    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' },
     mode: 'list',             // 'list' | 'summary'
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
@@ -153,7 +154,7 @@
     return {
       subject: m.subject, from: m.from, to: m.to, cc: m.cc, bcc: m.bcc,
       sentAt: m.sentAt, receivedAt: m.receivedAt, messageId: m.messageId, inReplyTo: m.inReplyTo,
-      references: m.references, importance: m.importance, bodyText: m.bodyText, hasHtml: !!m.bodyHtml,
+      references: m.references, conversationIndex: m.conversationIndex, conversationTopic: m.conversationTopic, importance: m.importance, bodyText: m.bodyText, hasHtml: !!m.bodyHtml,
       attachments: flat(m.attachments), innerText: inner.join('\n')
     };
   }
@@ -340,6 +341,18 @@
         m.ss = m._ssAuto;
       }
     }
+    linkThreads();
+  }
+
+  /** 再送のまとまりと返信の組を作り直す。SS 名を使うので分類の後に呼ぶ */
+  function linkThreads() {
+    const t = Thr.analyze(state.mails);
+    for (const m of state.mails) {
+      m.resend = t.resends.get(m) || null;        // { group, n, size, first }
+      m.replyTo = t.replies.get(m) || null;       // このメールが返信のとき { parent, method }
+      m.firstReply = t.firstReply.get(m) || null; // このメール（依頼）への最初の返信 { reply, method }
+    }
+    state.pairs = t.pairs;
   }
 
   function catName(m, a = 'main') { const c = m.cls && catById(m.cls[a].categoryId, a); return c ? c.name : '未分類'; }
@@ -384,6 +397,7 @@
       if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss) return false; }
       if (f.hideExcl && isExcluded(m)) return false;
       if (f.dup === 'only' && !m.dup) return false;
+      if (f.thread && !threadMatch(m, f.thread)) return false;
       if (q.length) { const s = searchText(m); if (!q.every((w) => s.includes(w))) return false; }
       if (fq && !Cls.norm(m.from.name + ' ' + m.from.email).includes(fq)) return false;
       if (dFrom != null || dTo != null) {
@@ -402,6 +416,16 @@
       return true;
     });
     return f.dup === 'uniq' ? uniqueByKey(list) : list;
+  }
+
+  /** 再送・返信の絞り込み */
+  function threadMatch(m, t) {
+    if (t === 'resend') return !!m.resend;
+    if (t === 'reply') return !!m.replyTo;
+    if (t === 'noreply') return !m.replyTo;
+    if (t === 'replied') return !m.replyTo && !!m.firstReply;
+    if (t === 'unreplied') return !m.replyTo && !m.firstReply;
+    return true;
   }
 
   /** 同じメール（Message-ID か内容が同じ）は最初の 1 件だけ残す */
@@ -528,6 +552,9 @@
         el('td', { class: 'subject' }, [
           m.error ? el('span', { class: 'badge err', text: '読めません' }) : null,
           m.dup ? el('span', { class: 'badge', text: '重複', title: '同じメールが複数のファイルにあります' }) : null,
+          m.resend ? el('span', { class: 'badge resend', text: m.resend.n > 1 ? `再送 ${m.resend.n}通目` : `再送あり（${m.resend.size}通）`, title: '同じ送信者から同じ件名で送り直されたメールです（件数はそのまま数えます）' }) : null,
+          m.replyTo ? el('span', { class: 'badge reply', text: '返信', title: '読み込んだメールへの返信です（集計には入れません）' }) : null,
+          m.firstReply ? el('span', { class: 'badge replied', text: '返信あり', title: '返信メールと結べました（評価データの組になります）' }) : null,
           m.importance === 2 ? el('span', { class: 'badge hi', text: '重要' }) : null,
           el('span', { class: 's', text: m.subject || '（件名なし）' }),
           el('span', { class: 'snip', text: m.error || (m.bodyText || '').replace(/\s+/g, ' ').slice(0, 80) })
@@ -791,6 +818,8 @@
       : m.ss.by === 'manual' ? '手で入力した名前です' : m.ss.by === 'xlsx' ? '添付 xlsx の見出しの隣から取りました' : '件名・本文から取りました';
     box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: 'SS' }), el('b', { text: (m.ss && m.ss.name) || '—' }), ' ', ssWhy]));
     box.appendChild(el('p', { class: 'file', text: '元ファイル: ' + (m.path || m.fileName) + '（' + fmtSize(m.size) + '）' }));
+    const thread = threadLinks(m);
+    if (thread) box.appendChild(thread);
     if (m.error) { box.appendChild(el('p', { class: 'note err', text: 'このファイルは読み取れませんでした: ' + m.error })); return; }
 
     const loading = el('p', { class: 'note', text: '読み込み中…' });
@@ -808,6 +837,24 @@
     } catch (e) {
       loading.textContent = '読み込めませんでした: ' + e.message;
     }
+  }
+
+  const METHOD = { header: 'ヘッダ（In-Reply-To・References）で結びました', conversation: 'Outlook の会話情報で結びました' };
+  /** 詳細に出す、同じ依頼の再送と返信へのリンク */
+  function threadLinks(m) {
+    const items = [];
+    const link = (x, label) => el('button', { type: 'button', class: 'link', onclick: () => openDetail(x.id) },
+      label + ' ' + fmtDateShort(mailDate(x)) + ' ' + (x.subject || '（件名なし）'));
+    if (m.replyTo) items.push(el('li', null, [link(m.replyTo.parent, '返信先:'), ' ', el('span', { class: 'muted', text: METHOD[m.replyTo.method] })]));
+    if (m.resend) {
+      const seen = new Set([m.key]);
+      state.mails.filter((x) => x.resend && x.resend.group === m.resend.group && !seen.has(x.key) && seen.add(x.key))
+        .sort((a, b) => a.resend.n - b.resend.n)
+        .forEach((x) => items.push(el('li', null, link(x, x.resend.n > 1 ? `再送 ${x.resend.n}通目:` : '最初の送信:'))));
+    }
+    if (m.firstReply) items.push(el('li', null, [link(m.firstReply.reply, '最初の返信:'), ' ', el('span', { class: 'muted', text: METHOD[m.firstReply.method] })]));
+    if (!items.length) return null;
+    return el('div', { class: 'thread' }, [el('p', { class: 'thread-title', text: '再送・返信' }), el('ul', null, items)]);
   }
 
   function closeDetail() {
@@ -984,9 +1031,9 @@
 
   // ---------- 集計 ----------
 
-  /** 集計の対象。重複は 1 件として数える */
+  /** 集計の対象。重複は 1 件として数え、返信メールは入れない（返信だけに絞っているときを除く） */
   function summaryRows() {
-    const rows = uniqueByKey(filteredMails(true).filter((m) => !m.error));
+    const rows = uniqueByKey(filteredMails(true).filter((m) => !m.error && (state.filter.thread === 'reply' || !m.replyTo)));
     return state.sumIncExcluded ? rows : rows.filter((m) => !isExcluded(m));
   }
   const keyName = (id, a) => (id === NONE ? '未分類' : (catById(id, a) || { name: '?' }).name);
@@ -994,7 +1041,8 @@
   /** 集計からの移動: 今の絞り込みを残したまま、クリックした条件を足して一覧へ（件数が集計と一致する） */
   function drill(patch) {
     // 集計と同じ数え方にそろえる（対象外の扱い・重複を 1 件にまとめる）
-    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded, dup: state.filter.dup === 'only' ? 'only' : 'uniq' });
+    Object.assign(state.filter, patch, { hideExcl: !state.sumIncExcluded, dup: state.filter.dup === 'only' ? 'only' : 'uniq',
+      thread: state.filter.thread || 'noreply' }); // 集計は返信メールを入れないので、一覧でも外す
     state.mode = 'list';
     state.page = 0;
     syncFilterInputs();
@@ -1003,6 +1051,7 @@
   function syncFilterInputs() {
     $('hideExcl').checked = state.filter.hideExcl;
     $('dupQ').value = state.filter.dup;
+    $('threadQ').value = state.filter.thread;
     $('q').value = state.filter.q; $('fromQ').value = state.filter.from;
     $('dateFrom').value = state.filter.dateFrom; $('dateTo').value = state.filter.dateTo; $('attQ').value = state.filter.att;
   }
@@ -1102,6 +1151,7 @@
     if (f.dateFrom || f.dateTo) out.push('期間: ' + (f.dateFrom || '（指定なし）') + ' 〜 ' + (f.dateTo || '（指定なし）'));
     if (f.att) out.push($('attQ').selectedOptions[0].textContent);
     if (f.dup === 'only') out.push('重複しているものだけ');
+    if (f.thread && f.thread !== 'noreply') out.push($('threadQ').selectedOptions[0].textContent);
     return out;
   }
   /** 今の集計の条件を文にする（保存 HTML の冒頭に出す） */
@@ -1322,7 +1372,10 @@
     const d = summaryData();
     const { rows, mx } = d;
     const excludedN = uniqueByKey(filteredMails(true).filter((m) => !m.error && isExcluded(m))).length;
-    const dupN = filteredMails(true).filter((m) => !m.error && (state.sumIncExcluded || !isExcluded(m))).length - rows.length;
+    const base = filteredMails(true).filter((m) => !m.error && (state.sumIncExcluded || !isExcluded(m)));
+    const counted = state.filter.thread === 'reply' ? base : base.filter((m) => !m.replyTo);
+    const dupN = counted.length - rows.length;
+    const replyN = uniqueByKey(base.filter((m) => m.replyTo)).length - uniqueByKey(counted.filter((m) => m.replyTo)).length;
 
     const saveSel = el('select', { id: 'sumSaveKind', onchange: (ev) => { state.reportWithMails = ev.target.value === 'mails'; } }, [
       el('option', { value: 'sum', text: '集計だけ', selected: !state.reportWithMails }),
@@ -1332,7 +1385,8 @@
       onclick: () => download(`集計-${stamp()}.html`, reportHtml(summaryData(), state.reportWithMails), 'text/html;charset=utf-8') }, 'HTML で保存');
     box.appendChild(el('div', { class: 'sum-head' }, [
       el('p', null, [el('b', { text: `${rows.length} 件` }), 'を集計しています。左のカテゴリ・上の絞り込み条件がかかります。数字をクリックすると、そのメールの一覧へ移ります。',
-        dupN > 0 ? el('span', { class: 'note', text: `（同じメールが複数のファイルにある ${dupN} 件は、1 件として数えています）` }) : null]),
+        dupN > 0 ? el('span', { class: 'note', text: `（同じメールが複数のファイルにある ${dupN} 件は、1 件として数えています）` }) : null,
+        replyN > 0 ? el('span', { class: 'note', text: `（返信メール ${replyN} 件は集計に入れていません）` }) : null]),
       el('label', null, [el('input', { type: 'checkbox', checked: state.sumIncExcluded, onchange: (ev) => { state.sumIncExcluded = ev.target.checked; render(); } }),
         `「書き出しから外す」カテゴリも含める（${excludedN} 件）`]),
       el('div', { class: 'sum-save' }, [el('label', { for: 'sumSaveKind', text: '保存する内容' }), saveSel, saveBtn])
@@ -1479,6 +1533,7 @@
     $('cntAll').textContent = state.mails.length;
     const rows = exportRows(scope, inc);
     const base = exportRows(scope, true).length;
+    $('pairCount').textContent = `依頼メールと最初の返信の組: ${state.pairs.length} 組`;
     $('exportCount').textContent = `${rows.length} 件を書き出します` + (base - rows.length ? `（「書き出しから外す」カテゴリの ${base - rows.length} 件を除く）` : '');
   }
   function doExport(fmt) {
@@ -1489,6 +1544,15 @@
     if (fmt === 'csv') download(name + '.csv', Exp.toCsv(rows, EXPORT_INFO), 'text/csv;charset=utf-8');
     else if (fmt === 'json') download(name + '.json', Exp.toJson(rows, EXPORT_INFO), 'application/json');
     else download(name + '.html', Exp.toHtml(rows, EXPORT_INFO, axis('main').categories.map((c) => c.name).concat('未分類')), 'text/html;charset=utf-8');
+  }
+
+  /** 依頼メールと最初の返信の組を書き出す（評価データ用） */
+  function doExportPairs(fmt) {
+    const pairs = state.pairs;
+    if (!pairs.length) { $('pairCount').textContent = '書き出せる組がありません（返信メールの .msg も読み込んでください）'; return; }
+    const name = 'pairs-' + stamp();
+    if (fmt === 'csv') download(name + '.csv', Exp.pairsToCsv(pairs, EXPORT_INFO), 'text/csv;charset=utf-8');
+    else download(name + '.json', Exp.pairsToJson(pairs, EXPORT_INFO), 'application/json');
   }
 
   // ---------- イベント ----------
@@ -1545,6 +1609,7 @@
     $('subQ').addEventListener('change', setFilter('sub'));
     $('hideExcl').addEventListener('change', (ev) => { state.filter.hideExcl = ev.target.checked; state.page = 0; render(); });
     $('dupQ').addEventListener('change', setFilter('dup'));
+    $('threadQ').addEventListener('change', setFilter('thread'));
     $('dupNote').addEventListener('click', (ev) => {
       if (!ev.target.closest('button')) return;
       state.filter.dup = 'only'; state.filter.cat = 'all'; state.mode = 'list'; state.page = 0;
@@ -1552,7 +1617,7 @@
     });
     $('ssQ').addEventListener('change', setFilter('ss'));
     $('resetFilter').addEventListener('click', () => {
-      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '' };
+      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' };
       syncFilterInputs();
       state.page = 0; render();
     });
@@ -1673,6 +1738,7 @@
     for (const r of document.querySelectorAll('input[name=scope]')) r.addEventListener('change', updateExportCount);
     $('incExcluded').addEventListener('change', updateExportCount);
     for (const b of document.querySelectorAll('[data-fmt]')) b.addEventListener('click', () => doExport(b.dataset.fmt));
+    for (const b of document.querySelectorAll('[data-pairs]')) b.addEventListener('click', () => doExportPairs(b.dataset.pairs));
   }
 
   loadSettings().then(() => { bind(); reclassify(); render(); });

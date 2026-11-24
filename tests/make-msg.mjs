@@ -231,7 +231,8 @@ export function compressRtfLiteral(rtfStr) {
 /**
  * spec: {
  *   subject, fromName, fromEmail, sentAt, receivedAt, to:[{name,email}], cc, bcc,
- *   body, html (string | Uint8Array), rtf (string), messageId, inReplyTo, importance,
+ *   body, html (string | Uint8Array), rtf (string), messageId, inReplyTo, references, importance,
+ *   conversationTopic, conversationIndex (Uint8Array),
  *   ansi: {codepage, encode: (s)=>Uint8Array}  // 指定すると件名・本文を 001E で書く
  *   attachments: [{name, data, mime, contentId} | {name, message: spec}]
  * }
@@ -254,6 +255,9 @@ function messageChildren(spec, embedded) {
   S(0x1000, spec.body);
   S(0x1035, spec.messageId);
   S(0x1042, spec.inReplyTo);
+  S(0x1039, spec.references);
+  S(0x0070, spec.conversationTopic);
+  if (spec.conversationIndex != null) props.push({ id: 0x0071, type: 'bin', value: spec.conversationIndex });
   S(0x007d, spec.headers);
   if (spec.html != null) props.push({ id: 0x1013, type: 'bin', value: typeof spec.html === 'string' ? new TextEncoder().encode(spec.html) : spec.html });
   if (spec.rtf != null) props.push({ id: 0x1009, type: 'bin', value: compressRtfLiteral(spec.rtf) });

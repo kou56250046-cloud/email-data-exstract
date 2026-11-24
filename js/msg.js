@@ -11,6 +11,7 @@
   // MAPI プロパティ ID
   var P = {
     IMPORTANCE: 0x0017, MESSAGE_CLASS: 0x001a, SUBJECT: 0x0037, CLIENT_SUBMIT_TIME: 0x0039,
+    CONVERSATION_TOPIC: 0x0070, CONVERSATION_INDEX: 0x0071,
     SENT_REP_NAME: 0x0042, SENT_REP_EMAIL: 0x0065, SENT_REP_ADDRTYPE: 0x0064,
     TRANSPORT_HEADERS: 0x007d, SENDER_NAME: 0x0c1a, SENDER_ADDRTYPE: 0x0c1e, SENDER_EMAIL: 0x0c1f,
     RECIPIENT_TYPE: 0x0c15, DISPLAY_BCC: 0x0e02, DISPLAY_CC: 0x0e03, DISPLAY_TO: 0x0e04,
@@ -320,6 +321,8 @@
       messageId: p.str(P.INTERNET_MESSAGE_ID) || hdr['message-id'] || '',
       inReplyTo: p.str(P.IN_REPLY_TO) || hdr['in-reply-to'] || '',
       references: p.str(P.INTERNET_REFERENCES) || hdr.references || '',
+      conversationTopic: p.str(P.CONVERSATION_TOPIC) || '',
+      conversationIndex: toHex(p.bytes(P.CONVERSATION_INDEX)),
       importance: imp == null ? 1 : imp,
       messageClass: p.str(P.MESSAGE_CLASS) || '',
       codepage: cpRef.cp,
@@ -329,6 +332,14 @@
       headers: headersRaw,
       attachments: attachments
     };
+  }
+
+  /** Outlook の会話情報（PR_CONVERSATION_INDEX）を 16 進文字列にする。返信は先頭 22 バイトを元のメールから引き継ぐ */
+  function toHex(b) {
+    if (!b || !b.length) return '';
+    var s = '';
+    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    return s;
   }
 
   /** @param {Uint8Array|ArrayBuffer} bytes .msg ファイルの中身 */

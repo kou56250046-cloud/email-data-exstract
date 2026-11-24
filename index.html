@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- メールは機密。外部への通信を一切させない -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-vLY37Sposs4MwNIgqZhG0PmrqrHAVW+5Z/p45/HxUhg=' 'sha256-x4TC8ojOyn9BgKN37visQAex+85IeMrqVFHMrsHtsTY=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-7ABXurvT9CO8PieUnqrG90V701CITYhmJxrrty/fAmI=' 'sha256-jYIvCzSQuLiumGmxAAeJvSXiHhuu6iJbZwlbrGNEDHs='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-RTskAvg71daJthwWwHlDpQQOwlPKj8ct/7cUXsL+zfc=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-33nAZvgT+XFSWbPNvIio7OdmLHs+MN2e9cwgroX7idw=' 'sha256-x4TC8ojOyn9BgKN37visQAex+85IeMrqVFHMrsHtsTY=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-v2+tul2u8aVoiBlXc5jBopcU1axxUfBKsVoeoi6AUHU=' 'sha256-1J5Slq/I+R/7PAdvaZ2mMoBQ0QYcb0USzJ4PuSI/FSU=' 'sha256-zgYS/plSTZihXrPnBVRkI4UOZUoTAX500ZD9gN7GQ0k='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
 <title>msg メール抽出・分類</title>
 <style>
 :root {
@@ -288,6 +288,10 @@ body.with-detail .list .snip { display: none; }
 .sum-alloc-form legend { padding: 0 4px; color: var(--sub); font-size: 12px; }
 .sum-alloc-form .num-in { width: 7em; }
 .sum-alloc-form input:disabled { opacity: .5; }
+.sum-alloc-zip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; }
+.sum-alloc-zip .num-in { width: 8em; }
+.sum-alloc-zip .note { margin: 0; flex-basis: 100%; }
+.sum-alloc-zip [role=status] { flex-basis: auto; }
 .sum-save label { font-size: 12.5px; color: var(--sub); }
 .sum-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin: 0 0 4px; }
 .sum-target { margin: 6px 0; font-size: 13.5px; }
@@ -2159,6 +2163,52 @@ body.with-detail .list .snip { display: none; }
     return { rows: rows, n: n, population: population, notes: notes };
   }
 
+  /** 評価データの層のキー（app.js の配分の層と同じ形: 主 / 副 / 主|副）。カテゴリ一覧に無いものは未分類 */
+  function stratumKeyOf(m, layer, mainCats, subCats) {
+    var has = function (cats, id) { return cats.some(function (c) { return c.id === id; }); };
+    var r = idOf(m, 'main'), c = idOf(m, 'sub');
+    if (!has(mainCats, r)) r = NONE;
+    if (!has(subCats, c)) c = NONE;
+    return layer === 'main' ? r : layer === 'sub' ? c : r + '|' + c;
+  }
+
+  /** 32 bit の乱数（mulberry32）。同じ seed なら同じ列 */
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function strHash(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    return h >>> 0;
+  }
+
+  /**
+   * 層ごとの無作為抽出。groups: { 層キー: [{ key, ... }] }、allocMap: { 層キー: 件数 }。
+   * 読み込み順に左右されないよう key で並べてから、seed と層キーで決まる乱数で並べ替えて先頭から取る。
+   * 返り値: { 層キー: [選ばれた要素] }（件数は min(配分, 母数)）
+   */
+  function sample(groups, allocMap, seed) {
+    var out = {};
+    Object.keys(allocMap).forEach(function (k) {
+      var items = (groups[k] || []).slice().sort(function (a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+      var n = Math.min(Math.max(0, Math.floor(+allocMap[k] || 0)), items.length);
+      var rand = rng((seed >>> 0) ^ strHash(k));
+      for (var i = items.length - 1; i > 0; i--) {
+        var j = Math.floor(rand() * (i + 1));
+        var t = items[i]; items[i] = items[j]; items[j] = t;
+      }
+      out[k] = items.slice(0, n);
+    });
+    return out;
+  }
+
   function cell(v) {
     var s = v == null ? '' : String(v);
     if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
@@ -2171,7 +2221,8 @@ body.with-detail .list .snip { display: none; }
 
   var api = {
     NONE: NONE, NO_SS: NO_SS, matrix: matrix, monthly: monthly, bySs: bySs, tableToCsv: tableToCsv, monthOf: monthOf,
-    shares: shares, matrixShares: matrixShares, largestRemainder: largestRemainder, allocate: allocate
+    shares: shares, matrixShares: matrixShares, largestRemainder: largestRemainder, allocate: allocate,
+    stratumKeyOf: stratumKeyOf, sample: sample
   };
   g.MsgSummary = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -2557,6 +2608,105 @@ body.with-detail .list .snip { display: none; }
   g.MsgStore = { get: get, set: set };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 </script>
+<script data-src="js/zipw.js">
+/*
+ * ZIP の書き出し（評価データの一括保存用）。無圧縮（STORE）だけ。zip64 は扱わない。
+ * ファイル名は UTF-8 フラグ（bit 11）付きで入れ、Windows のエクスプローラーでも日本語名のまま展開できるようにする。
+ */
+(function (g) {
+  'use strict';
+
+  var MAX_ENTRIES = 65535;
+  var MAX_BYTES = 0xFFFFFFFF;
+
+  var TABLE = null;
+  function crcTable() {
+    if (TABLE) return TABLE;
+    TABLE = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      TABLE[n] = c >>> 0;
+    }
+    return TABLE;
+  }
+  /** CRC-32（ZIP と同じ多項式） */
+  function crc32(bytes) {
+    var t = crcTable(), c = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) c = t[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  /** Windows のファイル名に使えない文字を _ にし、長さを切り詰める（フォルダ 1 段分の名前） */
+  function safeName(s, max) {
+    max = max || 80;
+    var t = String(s == null ? '' : s).replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, '_').replace(/[. ]+$/, '').trim();
+    if (/^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(t)) t = '_' + t;
+    if (t.length > max) {
+      var m = /(\.[A-Za-z0-9]{1,5})$/.exec(t); // 拡張子は残す
+      var ext = m ? m[1] : '';
+      t = t.slice(0, max - ext.length).replace(/[. ]+$/, '') + ext;
+    }
+    return t || '_';
+  }
+
+  /** Date → DOS の日付・時刻 */
+  function dosTime(d) {
+    d = d instanceof Date && !isNaN(d) ? d : new Date();
+    var y = Math.max(1980, Math.min(2107, d.getFullYear()));
+    return {
+      time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+      date: ((y - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()
+    };
+  }
+
+  /**
+   * entries: [{ name: 'フォルダ/ファイル名', data: Uint8Array | string, date?: Date }]
+   * 返り値: ZIP のバイト列（Uint8Array）
+   */
+  function build(entries) {
+    if (entries.length > MAX_ENTRIES) throw new Error('ファイルが ' + MAX_ENTRIES + ' 個を超えるため、zip にできません（' + entries.length + ' 個）');
+    var enc = new TextEncoder();
+    var parts = [], central = [], off = 0;
+    var seen = {};
+    entries.forEach(function (e) {
+      if (seen[e.name]) throw new Error('zip の中で名前が重なっています: ' + e.name);
+      seen[e.name] = true;
+      var nb = enc.encode(e.name);
+      var data = typeof e.data === 'string' ? enc.encode(e.data) : e.data;
+      var crc = crc32(data), dt = dosTime(e.date);
+      var lh = new Uint8Array(30), lv = new DataView(lh.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true); lv.setUint16(8, 0, true);
+      lv.setUint16(10, dt.time, true); lv.setUint16(12, dt.date, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true);
+      lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true);
+      var ch = new Uint8Array(46), cv = new DataView(ch.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true); cv.setUint16(10, 0, true);
+      cv.setUint16(12, dt.time, true); cv.setUint16(14, dt.date, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true);
+      cv.setUint16(28, nb.length, true); cv.setUint32(42, off, true);
+      parts.push(lh, nb, data);
+      central.push(ch, nb);
+      off += 30 + nb.length + data.length;
+      if (off > MAX_BYTES) throw new Error('合計が 4GB を超えるため、zip にできません。件数を減らしてください');
+    });
+    var cdSize = central.reduce(function (a, b) { return a + b.length; }, 0);
+    if (off + cdSize > MAX_BYTES) throw new Error('合計が 4GB を超えるため、zip にできません。件数を減らしてください');
+    var eocd = new Uint8Array(22), ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, cdSize, true); ev.setUint32(16, off, true);
+    var all = parts.concat(central, [eocd]);
+    var out = new Uint8Array(off + cdSize + 22), p = 0;
+    all.forEach(function (b) { out.set(b, p); p += b.length; });
+    return out;
+  }
+
+  var api = { crc32: crc32, build: build, safeName: safeName };
+  g.MsgZipW = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
 <script data-src="js/export.js">
 /*
  * 書き出し: CSV（Excel 向け）/ 閲覧用 HTML / JSON。
@@ -2623,9 +2773,10 @@ body.with-detail .list .snip { display: none; }
    * info: { main(m), sub(m), ss(m), by(m) } それぞれ表示用の文字列を返す
    */
   function toCsv(rows, info) {
-    var lines = [COLS.map(function (c) { return csvCell(c[0]); }).join(',')];
+    var cols = (info.extra || []).concat(COLS); // info.extra: [[見出し, fn(m)]] を先頭に足す（評価データの層・zip 内のパスなど）
+    var lines = [cols.map(function (c) { return csvCell(c[0]); }).join(',')];
     rows.forEach(function (m) {
-      lines.push(COLS.map(function (c) { return csvCell(c[1](m, info)); }).join(','));
+      lines.push(cols.map(function (c) { return csvCell(c[1](m, info)); }).join(','));
     });
     return '﻿' + lines.join('\r\n') + '\r\n';
   }
@@ -2717,6 +2868,8 @@ body.with-detail .list .snip { display: none; }
         row('To', addrs(m.to)); row('Cc', addrs(m.cc)); row('Bcc', addrs(m.bcc));
         row('添付', attNames(m));
         row('元ファイル', m.path || m.fileName);
+        var href = info.link && info.link(m); // zip 内の .msg への相対パス（評価データの一覧だけ）
+        if (href) h.push('<tr><th>ファイル</th><td><a href="' + esc(href.split('/').map(encodeURIComponent).join('/')) + '">' + esc(href) + '</a></td></tr>');
         row('エラー', m.error);
         h.push('</table><pre>' + esc(m.bodyText || '') + '</pre>');
         if (m.xlsxText) h.push('<details><summary>添付 xlsx の内容</summary><pre>' + esc(m.xlsxText) + '</pre></details>');
@@ -2745,11 +2898,13 @@ body.with-detail .list .snip { display: none; }
   const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
 
   const Msg = window.MsgParser, Cls = window.MsgClassify, Store = window.MsgStore, Exp = window.MsgExport, Xlsx = window.MsgXlsx;
-  const Fields = window.MsgFields, Sum = window.MsgSummary, Rep = window.MsgReport;
+  const Fields = window.MsgFields, Sum = window.MsgSummary, Rep = window.MsgReport, ZipW = window.MsgZipW;
   const NONE = Sum.NONE;
   const $ = (id) => document.getElementById(id);
   const PAGE = 100;
   const MAX_XLSX_TEXT = 50000;
+
+  function newSeed() { return Math.floor(Math.random() * 1000000); }
 
   const state = {
     mails: [],
@@ -2760,7 +2915,7 @@ body.with-detail .list .snip { display: none; }
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
     sumMatrixMode: 'count',   // 'count' | 'all' | 'row'
-    alloc: { layer: 'main', n: 200, method: 'min', minK: 5, incNone: false }, // 評価データの配分試算
+    alloc: { layer: 'main', n: 200, method: 'min', minK: 5, incNone: false, seed: newSeed() }, // 評価データの配分試算。seed は抽出の乱数
     reportWithMails: false,   // 集計の HTML にメール一覧を付けるか
     sort: { key: 'date', dir: -1 },
     page: 0,
@@ -3917,6 +4072,67 @@ body.with-detail .list .snip { display: none; }
     return s;
   }
 
+  /**
+   * 評価データを zip にする。試算の件数どおりに層ごとに無作為に選び、層のフォルダに元の .msg を入れる。
+   * 一覧（CSV / HTML）と条件をルートに置く。onProgress(済み, 全体)
+   */
+  async function buildEvalZip(d, onProgress) {
+    const a = state.alloc, al = d.al;
+    const { strata } = allocStrata(d.mx);
+    const groups = {};
+    for (const m of d.rows) { const k = Sum.stratumKeyOf(m, a.layer, d.mainCats, d.subCats); (groups[k] = groups[k] || []).push(m); }
+    const allocMap = {};
+    al.rows.forEach((r) => { allocMap[r.key] = r.alloc; });
+    const picked = Sum.sample(groups, allocMap, a.seed);
+    const root = '評価データ_' + stamp();
+    const dirOf = (key) => {
+      const [r, c] = a.layer === 'cross' ? key.split('|') : [key];
+      const names = a.layer === 'main' ? [keyName(r, 'main')] : a.layer === 'sub' ? [keyName(r, 'sub')] : [keyName(r, 'main'), keyName(c, 'sub')];
+      return names.map((n) => ZipW.safeName(n, 40)).join('/');
+    };
+    const total = strata.reduce((s, x) => s + Math.min(allocMap[x.key] || 0, x.count), 0);
+    const entries = [], list = [], failed = [], pathOf = new Map(), layerOf = new Map();
+    let done = 0;
+    for (const s of strata) {
+      const dir = dirOf(s.key);
+      const items = (picked[s.key] || []).slice().sort((x, y) => String(x.sentAt || '').localeCompare(String(y.sentAt || '')));
+      let no = 0;
+      for (const m of items) {
+        try {
+          const data = new Uint8Array(await m.file.arrayBuffer());
+          no++;
+          const name = `${String(no).padStart(3, '0')}_${ZipW.safeName(m.fileName || 'mail.msg', 80)}`;
+          const rel = `${dir}/${name}`;
+          entries.push({ name: `${root}/${rel}`, data, date: m.sentAt ? new Date(m.sentAt) : null });
+          pathOf.set(m, rel); layerOf.set(m, s.name); list.push(m);
+        } catch (e) {
+          failed.push(`${m.path || m.fileName}（${e && e.message ? e.message : e}）`);
+        }
+        onProgress && onProgress(++done, total);
+        if (done % 20 === 0) await tick();
+      }
+    }
+    const info = Object.assign({}, EXPORT_INFO, {
+      extra: [['層', (m) => layerOf.get(m)], ['zip内のパス', (m) => pathOf.get(m)]],
+      link: (m) => pathOf.get(m)
+    });
+    const got = {};
+    list.forEach((m) => { const k = layerOf.get(m); got[k] = (got[k] || 0) + 1; });
+    const cond = [
+      '評価データ', '作成日時: ' + Exp.fmtDate(new Date().toISOString()), targetLabel(d), allocTitle(),
+      `シード: ${a.seed}（同じ絞り込み・分類・条件・シードなら同じメールが選ばれます）`,
+      '', '注意:', ...(al.notes.length ? al.notes.map((n) => '- ' + n) : ['- なし']),
+      '', '層ごとの件数（層 / 母数 / 配分 / 入れた件数）:',
+      ...al.rows.map((r) => `- ${r.name} / ${r.count} / ${r.alloc} / ${got[r.name] || 0}`),
+      `合計: ${list.length} 件`,
+      ...(failed.length ? ['', `読めなかったファイル（${failed.length} 件、zip に入れていません）:`, ...failed.map((f) => '- ' + f)] : [])
+    ].join('\r\n') + '\r\n';
+    entries.push({ name: `${root}/一覧.csv`, data: Exp.toCsv(list, info) });
+    entries.push({ name: `${root}/一覧.html`, data: Exp.toHtml(list, info, axis('main').categories.map((c) => c.name).concat('未分類')) });
+    entries.push({ name: `${root}/条件.txt`, data: '﻿' + cond });
+    return { zip: ZipW.build(entries), root, count: list.length, failed: failed.length };
+  }
+
   /** 評価データの配分試算の節。入力欄はそのまま残し、結果の部分だけを描き直す（入力中のフォーカスを保つ） */
   function allocSection(d) {
     const a = state.alloc;
@@ -3946,6 +4162,27 @@ body.with-detail .list .snip { display: none; }
       el('label', null, ['各層の最低 ', minIn, ' 件']),
       el('label', null, [el('input', { type: 'checkbox', checked: a.incNone, onchange: (ev) => { state.alloc.incNone = ev.target.checked; refresh(); } }), '未分類も層に含める'])
     ]);
+    const seedIn = el('input', { type: 'number', min: '0', step: '1', value: String(a.seed), class: 'num-in', oninput: num('seed') });
+    const zipMsg = el('span', { class: 'note', role: 'status' });
+    const zipBtn = el('button', { class: 'btn small primary', type: 'button', disabled: !d.rows.length, onclick: async () => {
+      zipBtn.disabled = true;
+      zipMsg.textContent = '準備しています…';
+      try {
+        const r = await buildEvalZip(cur, (i, n) => { zipMsg.textContent = `元ファイルを読んでいます ${i} / ${n} 件`; });
+        download(r.root + '.zip', new Blob([r.zip], { type: 'application/zip' }));
+        zipMsg.textContent = `${r.count} 件を zip に入れました` + (r.failed ? `（読めなかった ${r.failed} 件は 条件.txt に書いています）` : '');
+      } catch (e) {
+        zipMsg.textContent = 'zip を作れませんでした: ' + (e && e.message ? e.message : e);
+      } finally {
+        zipBtn.disabled = false;
+      }
+    } }, '評価データを zip で保存');
+    const zipBox = el('div', { class: 'sum-alloc-zip' }, [
+      el('label', null, ['シード ', seedIn]),
+      el('button', { class: 'btn small ghost', type: 'button', onclick: () => { state.alloc.seed = newSeed(); seedIn.value = String(state.alloc.seed); } }, '変える'),
+      zipBtn, zipMsg,
+      el('p', { class: 'note', text: '試算の件数どおりに各層から無作為に選び、層ごとのフォルダに元の .msg を入れます。一覧（CSV / HTML）と条件（シードなど）も入ります。同じシードなら同じメールが選ばれます。' })
+    ]);
     const parts = filterParts();
     target.textContent = targetLabel(d);
     target.classList.toggle('filtered', parts.length > 0);
@@ -3960,7 +4197,7 @@ body.with-detail .list .snip { display: none; }
       el('div', { class: 'sum-sec-head' }, [el('h3', { text: '評価データの配分試算' }), csvButton('CSV で書き出す', '集計_配分試算', allocCsv)]),
       target,
       el('p', { class: 'note', text: 'どの分類から何件ずつ評価データを集めるかの目安です。条件を変えると、すぐに表が変わります。' }),
-      form, help, result
+      form, help, result, zipBox
     ]);
     refresh();
     return sec;

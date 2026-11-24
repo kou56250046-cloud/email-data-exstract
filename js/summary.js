@@ -206,6 +206,52 @@
     return { rows: rows, n: n, population: population, notes: notes };
   }
 
+  /** 評価データの層のキー（app.js の配分の層と同じ形: 主 / 副 / 主|副）。カテゴリ一覧に無いものは未分類 */
+  function stratumKeyOf(m, layer, mainCats, subCats) {
+    var has = function (cats, id) { return cats.some(function (c) { return c.id === id; }); };
+    var r = idOf(m, 'main'), c = idOf(m, 'sub');
+    if (!has(mainCats, r)) r = NONE;
+    if (!has(subCats, c)) c = NONE;
+    return layer === 'main' ? r : layer === 'sub' ? c : r + '|' + c;
+  }
+
+  /** 32 bit の乱数（mulberry32）。同じ seed なら同じ列 */
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function strHash(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    return h >>> 0;
+  }
+
+  /**
+   * 層ごとの無作為抽出。groups: { 層キー: [{ key, ... }] }、allocMap: { 層キー: 件数 }。
+   * 読み込み順に左右されないよう key で並べてから、seed と層キーで決まる乱数で並べ替えて先頭から取る。
+   * 返り値: { 層キー: [選ばれた要素] }（件数は min(配分, 母数)）
+   */
+  function sample(groups, allocMap, seed) {
+    var out = {};
+    Object.keys(allocMap).forEach(function (k) {
+      var items = (groups[k] || []).slice().sort(function (a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+      var n = Math.min(Math.max(0, Math.floor(+allocMap[k] || 0)), items.length);
+      var rand = rng((seed >>> 0) ^ strHash(k));
+      for (var i = items.length - 1; i > 0; i--) {
+        var j = Math.floor(rand() * (i + 1));
+        var t = items[i]; items[i] = items[j]; items[j] = t;
+      }
+      out[k] = items.slice(0, n);
+    });
+    return out;
+  }
+
   function cell(v) {
     var s = v == null ? '' : String(v);
     if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
@@ -218,7 +264,8 @@
 
   var api = {
     NONE: NONE, NO_SS: NO_SS, matrix: matrix, monthly: monthly, bySs: bySs, tableToCsv: tableToCsv, monthOf: monthOf,
-    shares: shares, matrixShares: matrixShares, largestRemainder: largestRemainder, allocate: allocate
+    shares: shares, matrixShares: matrixShares, largestRemainder: largestRemainder, allocate: allocate,
+    stratumKeyOf: stratumKeyOf, sample: sample
   };
   g.MsgSummary = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

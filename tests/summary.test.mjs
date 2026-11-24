@@ -119,3 +119,26 @@ test('配分: 総件数が母数より多いと注記、0 件や空でも壊れ�
   assert.equal(sum(S.allocate(strata, 0, 'min', 5)), 0);
   assert.deepEqual(S.allocate([], 10, 'prop').rows, []);
 });
+
+test('stratumKeyOf: 集計と同じく、一覧に無いカテゴリは未分類', () => {
+  const m = row('gone', 's2');
+  assert.equal(S.stratumKeyOf(m, 'main', mainCats, subCats), S.NONE);
+  assert.equal(S.stratumKeyOf(m, 'sub', mainCats, subCats), 's2');
+  assert.equal(S.stratumKeyOf(row('m1', null), 'cross', mainCats, subCats), 'm1|' + S.NONE);
+});
+
+test('sample: 件数は min(配分, 母数)・同じシードなら同じ・入力順に依存しない', () => {
+  const mk = (p, n) => Array.from({ length: n }, (_, i) => ({ key: p + String(i).padStart(3, '0') }));
+  const groups = { a: mk('a', 50), b: mk('b', 3) };
+  const r1 = S.sample(groups, { a: 10, b: 5, c: 2 }, 42);
+  assert.equal(r1.a.length, 10);
+  assert.equal(r1.b.length, 3);
+  assert.equal(r1.c.length, 0);
+  assert.equal(new Set(r1.a.map((x) => x.key)).size, 10, '重複なし');
+  const rev = { a: groups.a.slice().reverse(), b: groups.b.slice().reverse() };
+  const r2 = S.sample(rev, { a: 10, b: 5, c: 2 }, 42);
+  assert.deepEqual(r2.a.map((x) => x.key), r1.a.map((x) => x.key));
+  const r3 = S.sample(groups, { a: 10 }, 43);
+  assert.notDeepEqual(r3.a.map((x) => x.key), r1.a.map((x) => x.key));
+  assert.equal(groups.a[0].key, 'a000', '入力を書き換えない');
+});

@@ -63,9 +63,10 @@
    * info: { main(m), sub(m), ss(m), by(m) } それぞれ表示用の文字列を返す
    */
   function toCsv(rows, info) {
-    var lines = [COLS.map(function (c) { return csvCell(c[0]); }).join(',')];
+    var cols = (info.extra || []).concat(COLS); // info.extra: [[見出し, fn(m)]] を先頭に足す（評価データの層・zip 内のパスなど）
+    var lines = [cols.map(function (c) { return csvCell(c[0]); }).join(',')];
     rows.forEach(function (m) {
-      lines.push(COLS.map(function (c) { return csvCell(c[1](m, info)); }).join(','));
+      lines.push(cols.map(function (c) { return csvCell(c[1](m, info)); }).join(','));
     });
     return '﻿' + lines.join('\r\n') + '\r\n';
   }
@@ -157,6 +158,8 @@
         row('To', addrs(m.to)); row('Cc', addrs(m.cc)); row('Bcc', addrs(m.bcc));
         row('添付', attNames(m));
         row('元ファイル', m.path || m.fileName);
+        var href = info.link && info.link(m); // zip 内の .msg への相対パス（評価データの一覧だけ）
+        if (href) h.push('<tr><th>ファイル</th><td><a href="' + esc(href.split('/').map(encodeURIComponent).join('/')) + '">' + esc(href) + '</a></td></tr>');
         row('エラー', m.error);
         h.push('</table><pre>' + esc(m.bodyText || '') + '</pre>');
         if (m.xlsxText) h.push('<details><summary>添付 xlsx の内容</summary><pre>' + esc(m.xlsxText) + '</pre></details>');

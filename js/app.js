@@ -11,11 +11,13 @@
   const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
 
   const Msg = window.MsgParser, Cls = window.MsgClassify, Store = window.MsgStore, Exp = window.MsgExport, Xlsx = window.MsgXlsx;
-  const Fields = window.MsgFields, Sum = window.MsgSummary, Rep = window.MsgReport;
+  const Fields = window.MsgFields, Sum = window.MsgSummary, Rep = window.MsgReport, ZipW = window.MsgZipW;
   const NONE = Sum.NONE;
   const $ = (id) => document.getElementById(id);
   const PAGE = 100;
   const MAX_XLSX_TEXT = 50000;
+
+  function newSeed() { return Math.floor(Math.random() * 1000000); }
 
   const state = {
     mails: [],
@@ -26,7 +28,7 @@
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
     sumMatrixMode: 'count',   // 'count' | 'all' | 'row'
-    alloc: { layer: 'main', n: 200, method: 'min', minK: 5, incNone: false }, // 評価データの配分試算
+    alloc: { layer: 'main', n: 200, method: 'min', minK: 5, incNone: false, seed: newSeed() }, // 評価データの配分試算。seed は抽出の乱数
     reportWithMails: false,   // 集計の HTML にメール一覧を付けるか
     sort: { key: 'date', dir: -1 },
     page: 0,
@@ -1183,6 +1185,67 @@
     return s;
   }
 
+  /**
+   * 評価データを zip にする。試算の件数どおりに層ごとに無作為に選び、層のフォルダに元の .msg を入れる。
+   * 一覧（CSV / HTML）と条件をルートに置く。onProgress(済み, 全体)
+   */
+  async function buildEvalZip(d, onProgress) {
+    const a = state.alloc, al = d.al;
+    const { strata } = allocStrata(d.mx);
+    const groups = {};
+    for (const m of d.rows) { const k = Sum.stratumKeyOf(m, a.layer, d.mainCats, d.subCats); (groups[k] = groups[k] || []).push(m); }
+    const allocMap = {};
+    al.rows.forEach((r) => { allocMap[r.key] = r.alloc; });
+    const picked = Sum.sample(groups, allocMap, a.seed);
+    const root = '評価データ_' + stamp();
+    const dirOf = (key) => {
+      const [r, c] = a.layer === 'cross' ? key.split('|') : [key];
+      const names = a.layer === 'main' ? [keyName(r, 'main')] : a.layer === 'sub' ? [keyName(r, 'sub')] : [keyName(r, 'main'), keyName(c, 'sub')];
+      return names.map((n) => ZipW.safeName(n, 40)).join('/');
+    };
+    const total = strata.reduce((s, x) => s + Math.min(allocMap[x.key] || 0, x.count), 0);
+    const entries = [], list = [], failed = [], pathOf = new Map(), layerOf = new Map();
+    let done = 0;
+    for (const s of strata) {
+      const dir = dirOf(s.key);
+      const items = (picked[s.key] || []).slice().sort((x, y) => String(x.sentAt || '').localeCompare(String(y.sentAt || '')));
+      let no = 0;
+      for (const m of items) {
+        try {
+          const data = new Uint8Array(await m.file.arrayBuffer());
+          no++;
+          const name = `${String(no).padStart(3, '0')}_${ZipW.safeName(m.fileName || 'mail.msg', 80)}`;
+          const rel = `${dir}/${name}`;
+          entries.push({ name: `${root}/${rel}`, data, date: m.sentAt ? new Date(m.sentAt) : null });
+          pathOf.set(m, rel); layerOf.set(m, s.name); list.push(m);
+        } catch (e) {
+          failed.push(`${m.path || m.fileName}（${e && e.message ? e.message : e}）`);
+        }
+        onProgress && onProgress(++done, total);
+        if (done % 20 === 0) await tick();
+      }
+    }
+    const info = Object.assign({}, EXPORT_INFO, {
+      extra: [['層', (m) => layerOf.get(m)], ['zip内のパス', (m) => pathOf.get(m)]],
+      link: (m) => pathOf.get(m)
+    });
+    const got = {};
+    list.forEach((m) => { const k = layerOf.get(m); got[k] = (got[k] || 0) + 1; });
+    const cond = [
+      '評価データ', '作成日時: ' + Exp.fmtDate(new Date().toISOString()), targetLabel(d), allocTitle(),
+      `シード: ${a.seed}（同じ絞り込み・分類・条件・シードなら同じメールが選ばれます）`,
+      '', '注意:', ...(al.notes.length ? al.notes.map((n) => '- ' + n) : ['- なし']),
+      '', '層ごとの件数（層 / 母数 / 配分 / 入れた件数）:',
+      ...al.rows.map((r) => `- ${r.name} / ${r.count} / ${r.alloc} / ${got[r.name] || 0}`),
+      `合計: ${list.length} 件`,
+      ...(failed.length ? ['', `読めなかったファイル（${failed.length} 件、zip に入れていません）:`, ...failed.map((f) => '- ' + f)] : [])
+    ].join('\r\n') + '\r\n';
+    entries.push({ name: `${root}/一覧.csv`, data: Exp.toCsv(list, info) });
+    entries.push({ name: `${root}/一覧.html`, data: Exp.toHtml(list, info, axis('main').categories.map((c) => c.name).concat('未分類')) });
+    entries.push({ name: `${root}/条件.txt`, data: '﻿' + cond });
+    return { zip: ZipW.build(entries), root, count: list.length, failed: failed.length };
+  }
+
   /** 評価データの配分試算の節。入力欄はそのまま残し、結果の部分だけを描き直す（入力中のフォーカスを保つ） */
   function allocSection(d) {
     const a = state.alloc;
@@ -1212,6 +1275,27 @@
       el('label', null, ['各層の最低 ', minIn, ' 件']),
       el('label', null, [el('input', { type: 'checkbox', checked: a.incNone, onchange: (ev) => { state.alloc.incNone = ev.target.checked; refresh(); } }), '未分類も層に含める'])
     ]);
+    const seedIn = el('input', { type: 'number', min: '0', step: '1', value: String(a.seed), class: 'num-in', oninput: num('seed') });
+    const zipMsg = el('span', { class: 'note', role: 'status' });
+    const zipBtn = el('button', { class: 'btn small primary', type: 'button', disabled: !d.rows.length, onclick: async () => {
+      zipBtn.disabled = true;
+      zipMsg.textContent = '準備しています…';
+      try {
+        const r = await buildEvalZip(cur, (i, n) => { zipMsg.textContent = `元ファイルを読んでいます ${i} / ${n} 件`; });
+        download(r.root + '.zip', new Blob([r.zip], { type: 'application/zip' }));
+        zipMsg.textContent = `${r.count} 件を zip に入れました` + (r.failed ? `（読めなかった ${r.failed} 件は 条件.txt に書いています）` : '');
+      } catch (e) {
+        zipMsg.textContent = 'zip を作れませんでした: ' + (e && e.message ? e.message : e);
+      } finally {
+        zipBtn.disabled = false;
+      }
+    } }, '評価データを zip で保存');
+    const zipBox = el('div', { class: 'sum-alloc-zip' }, [
+      el('label', null, ['シード ', seedIn]),
+      el('button', { class: 'btn small ghost', type: 'button', onclick: () => { state.alloc.seed = newSeed(); seedIn.value = String(state.alloc.seed); } }, '変える'),
+      zipBtn, zipMsg,
+      el('p', { class: 'note', text: '試算の件数どおりに各層から無作為に選び、層ごとのフォルダに元の .msg を入れます。一覧（CSV / HTML）と条件（シードなど）も入ります。同じシードなら同じメールが選ばれます。' })
+    ]);
     const parts = filterParts();
     target.textContent = targetLabel(d);
     target.classList.toggle('filtered', parts.length > 0);
@@ -1226,7 +1310,7 @@
       el('div', { class: 'sum-sec-head' }, [el('h3', { text: '評価データの配分試算' }), csvButton('CSV で書き出す', '集計_配分試算', allocCsv)]),
       target,
       el('p', { class: 'note', text: 'どの分類から何件ずつ評価データを集めるかの目安です。条件を変えると、すぐに表が変わります。' }),
-      form, help, result
+      form, help, result, zipBox
     ]);
     refresh();
     return sec;

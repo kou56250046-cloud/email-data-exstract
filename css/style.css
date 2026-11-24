@@ -278,6 +278,10 @@ body.with-detail .list .snip { display: none; }
 .sum-alloc-form legend { padding: 0 4px; color: var(--sub); font-size: 12px; }
 .sum-alloc-form .num-in { width: 7em; }
 .sum-alloc-form input:disabled { opacity: .5; }
+.sum-alloc-zip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; }
+.sum-alloc-zip .num-in { width: 8em; }
+.sum-alloc-zip .note { margin: 0; flex-basis: 100%; }
+.sum-alloc-zip [role=status] { flex-basis: auto; }
 .sum-save label { font-size: 12.5px; color: var(--sub); }
 .sum-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin: 0 0 4px; }
 .sum-target { margin: 6px 0; font-size: 13.5px; }

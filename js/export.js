@@ -39,6 +39,8 @@
     ['副カテゴリ', function (m, info) { return info.sub(m); }],
     ['SS名', function (m, info) { return info.ss(m); }],
     ['分類方法', function (m, info) { return info.by(m); }],
+    ['依頼内容チェック', function (m, info) { return info.checked ? info.checked(m) : ''; }],
+    ['負担区分', function (m, info) { return info.burden ? info.burden(m) : ''; }],
     ['送信日時', function (m) { return fmtDate(m.sentAt); }],
     ['受信日時', function (m) { return fmtDate(m.receivedAt); }],
     ['送信者名', function (m) { return m.from ? m.from.name : ''; }],
@@ -60,7 +62,7 @@
   ];
 
   /**
-   * info: { main(m), sub(m), ss(m), by(m) } それぞれ表示用の文字列を返す
+   * info: { main(m), sub(m), ss(m), by(m), checked?(m), burden?(m) } それぞれ表示用の文字列を返す
    */
   function toCsv(rows, info) {
     var cols = (info.extra || []).concat(COLS); // info.extra: [[見出し, fn(m)]] を先頭に足す（評価データの層・zip 内のパスなど）
@@ -83,6 +85,7 @@
           messageId: m.messageId, inReplyTo: m.inReplyTo, references: m.references,
           bodyText: m.bodyText,
           xlsxText: m.xlsxText || '',
+          repairForm: m.form || null, // 補修依頼書の欄 { checked, repair, status, burden }
           attachments: (m.attachments || []).map(function (a) {
             return { name: a.name, size: a.size, mime: a.mime, kind: a.kind, inline: !!a.hidden };
           })

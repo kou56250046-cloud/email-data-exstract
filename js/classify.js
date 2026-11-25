@@ -14,6 +14,10 @@
     to: '宛先（To/Cc）',
     attachmentName: '添付ファイル名',
     xlsx: '添付xlsxの内容',
+    formChecked: '補修依頼書: 依頼内容のチェック',
+    formDetail: '補修依頼書: 補修内容・状況内容',
+    burden: '補修依頼書: 負担区分',
+    content: '件名・本文・補修内容・状況内容',
     hasAttachment: '添付あり'
   };
   var OPS = {
@@ -43,6 +47,12 @@
       case 'to': return addrText(mail.to) + ' ' + addrText(mail.cc);
       case 'attachmentName': return (mail.attachments || []).map(function (a) { return a.name; }).join(' ');
       case 'xlsx': return mail.xlsxText || '';
+      // 補修依頼書の欄（js/fields.js の extractForm）。チェックは 1 行に 1 項目
+      case 'formChecked': return mail.form ? mail.form.checked.join('\n') : '';
+      case 'formDetail': return mail.form ? mail.form.repair + '\n' + mail.form.status : '';
+      case 'burden': return mail.form ? mail.form.burden : '';
+      // 補修依頼書の選択肢の文字（チェックの無いものも含む）を拾わないよう、xlsx は自由記述の欄だけ
+      case 'content': return (mail.subject || '') + '\n' + (mail.bodyText || '') + (mail.form ? '\n' + mail.form.repair + '\n' + mail.form.status : '');
       case 'any': return (mail.subject || '') + '\n' + (mail.from.name || '') + ' ' + (mail.from.email || '') + '\n' + (mail.bodyText || '') + '\n' + (mail.xlsxText || '');
       default: return '';
     }
@@ -142,22 +152,41 @@
         rule('r-repair', 'c-repair', 'any', '補修, 修理, 修繕, 修復, 復旧, 故障, 不具合, 破損, 損傷, 異常, 不良, 点検, 交換, 取替, 取り替え, 漏れ, 漏洩, 調整, 直して, メンテ, 工事, 対応依頼, 依頼')
       ]
     };
-    var subDefs = [
-      ['s-dispenser', '計量機', '#d9480f', '計量機, 給油機, ノズル, 給油ホース, 表示器, 給油ポンプ'],
-      ['s-carwash', '洗車機', '#1971c2', '洗車機, 洗車'],
-      ['s-sign', '看板・照明', '#e67700', '看板, サイン, 照明, キャノピー, led照明, led灯, 蛍光灯, ポール'],
-      ['s-elec', 'POS・電気', '#7048e8', 'pos端末, posレジ, レジ, 分電盤, ブレーカー, 配線, 電気, 漏電'],
-      ['s-tank', 'タンク・配管', '#0c8599', 'タンク, 液面計, 配管, 漏洩, 油水分離, 地下'],
-      ['s-air', '空調・コンプレッサー', '#2f9e44', 'エアコン, 空調, コンプレッサー, エアー'],
-      ['s-building', '建物・舗装', '#5c940d', '防火壁, 舗装, 屋根, 外壁, トイレ, 排水, 建物, 事務所, シャッター'],
-      ['s-other', 'その他設備', '#8a8f98', '']
+    return { version: 3, axes: { main: main, sub: subDefaults() }, ssLabels: SS_LABELS.slice() };
+  }
+
+  /**
+   * 副カテゴリ＝補修依頼書の「依頼内容」のチェック項目。
+   * まずチェックで決め、チェックが無ければ件名・本文・補修内容・状況内容の語で推定する。
+   * 語のルールは、広い語（「壁」など）を持つものほど後ろに置く
+   */
+  function subDefaults() {
+    var defs = [
+      ['s-bldg', '建物関係', '#2f9e44'],
+      ['s-civil', '外構関係', '#5c940d'],
+      ['s-machine', '機器関係', '#f76707'],
+      ['s-gauge', '油面計', '#0ca678'],
+      ['s-service', 'サービス機器', '#d9480f'],
+      ['s-self', 'セルフ機器', '#7048e8'],
+      ['s-elec', '電気関係', '#1971c2'],
+      ['s-other', 'その他', '#8a8f98']
+    ];
+    var words = [
+      ['s-gauge', '油面計, 液面計, 地下タンク, 廃油タンク, マンホール, 漏洩検知, 注油口, ベーパー, リカバリーホース, 通気管, 油水分離'],
+      ['s-service', '計量機, 計量器, 給油機, ノズル, 給油ホース, スイベル, vベルト, レシート印字, 吐出'],
+      ['s-machine', '洗車機, リフト, コンプレッサー, コンプレサー, エアタワー, タイヤチェンジャー, ウォールタンク'],
+      ['s-self', '精算機, 釣銭機, pos, レジ, インターホン, 監視カメラ, 放送, マイク'],
+      ['s-elec', '照明, led, 投光器, 構内灯, キャノピー灯, 不灯, 玉切れ, 電球, 蛍光灯, 漏電, ブレーカー, 分電盤, コンセント, 配線, 電気'],
+      ['s-civil', '土間, クラック, ひび割れ, グレーチング, 側溝, ドレイン, 防火塀, 防火壁, バリカー, 車止め, 車輪止め, 犬走り, フェンス, アンカー, 舗装, 段差, フォアコート, フォーコート, 看板, サインポール'],
+      ['s-bldg', 'シャッター, 自動ドア, 防火戸, 雨漏, ガラス, 換気扇, 空調, エアコン, ダクト, トイレ, シンク, シャワー, 水漏れ, 排水, 屋根, 天井, 事務所, 建物, 壁']
     ];
     var sub = { categories: [], rules: [] };
-    subDefs.forEach(function (d) {
+    defs.forEach(function (d) {
       sub.categories.push({ id: d[0], name: d[1], color: d[2], exclude: false });
-      if (d[3]) sub.rules.push(rule('r' + d[0], d[0], 'any', d[3]));
+      sub.rules.push({ id: 'rc' + d[0], categoryId: d[0], enabled: true, conditions: [{ field: 'formChecked', op: 'contains', value: d[1] }] });
     });
-    return { version: 2, axes: { main: main, sub: sub }, ssLabels: SS_LABELS.slice() };
+    words.forEach(function (w) { sub.rules.push(rule('rw' + w[0], w[0], 'content', w[1])); });
+    return sub;
   }
 
   /**
@@ -168,11 +197,13 @@
     var d = defaults();
     var migrated = false;
     var out;
+    var resetSub = false; // v3 で副カテゴリを依頼内容のチェック項目に置き換えた
     if (settings && settings.axes && settings.axes.main) {
       out = settings;
-      if (!out.axes.sub) out.axes.sub = d.axes.sub;
+      if (!out.axes.sub || !(out.version >= 3)) { out.axes.sub = d.axes.sub; resetSub = true; }
       if (!Array.isArray(out.ssLabels)) out.ssLabels = d.ssLabels;
-      out.version = 2;
+      if (out.version !== 3) migrated = true;
+      out.version = 3;
     } else if (settings && Array.isArray(settings.categories)) {
       migrated = true;
       var cats = settings.categories.map(function (c) {
@@ -198,7 +229,7 @@
         cats.splice(after < 0 ? cats.length : after + 1, 0, dc);
         rules.splice(at, 0, dr);
       });
-      out = { version: 2, axes: { main: { categories: cats, rules: rules }, sub: d.axes.sub }, ssLabels: d.ssLabels };
+      out = { version: 3, axes: { main: { categories: cats, rules: rules }, sub: d.axes.sub }, ssLabels: d.ssLabels };
     } else {
       out = d;
     }
@@ -207,7 +238,14 @@
       for (var k in manual) {
         var v = manual[k];
         if (typeof v === 'string') { m2[k] = { main: v }; migrated = true; }
-        else if (v && typeof v === 'object') m2[k] = v;
+        else if (v && typeof v === 'object') {
+          if (resetSub && v.sub) {
+            v = Object.assign({}, v);
+            delete v.sub; // 旧い副カテゴリの手直しは、新しい副カテゴリでは意味が無い
+            migrated = true;
+          }
+          if (Object.keys(v).length) m2[k] = v;
+        }
       }
     }
     return { settings: out, manual: m2, migrated: migrated };

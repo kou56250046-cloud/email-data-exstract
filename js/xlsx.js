@@ -26,36 +26,61 @@
       if (u32(b, p) !== 0x02014b50) break;
       var method = u16(b, p + 10);
       var csize = u32(b, p + 20);
+      var usize = u32(b, p + 24);
       var nlen = u16(b, p + 28), xlen = u16(b, p + 30), clen = u16(b, p + 32);
       var local = u32(b, p + 42);
       var name = utf8.decode(b.subarray(p + 46, p + 46 + nlen));
-      out[name.replace(/^\//, '')] = { method: method, csize: csize, local: local };
+      out[name.replace(/^\//, '')] = { method: method, csize: csize, usize: usize, local: local };
       p += 46 + nlen + xlen + clen;
     }
     return out;
   }
 
-  function inflateRaw(data) {
+  // 展開後の大きさの上限（圧縮爆弾でタブが落ちないように）。図形の VML などはもっと小さくてよい
+  var MAX_ENTRY = 64 * 1024 * 1024;
+
+  /** 展開しながら大きさを数え、max を超えたら打ち切って失敗にする */
+  function inflateRaw(data, max) {
     if (typeof DecompressionStream === 'undefined') return Promise.reject(new Error('このブラウザは展開に対応していません'));
     var ds = new DecompressionStream('deflate-raw');
-    var stream = new Blob([data]).stream().pipeThrough(ds);
-    return new Response(stream).arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
+    var reader = new Blob([data]).stream().pipeThrough(ds).getReader();
+    var chunks = [], total = 0;
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.done) {
+          var out = new Uint8Array(total), o = 0;
+          chunks.forEach(function (c) { out.set(c, o); o += c.length; });
+          return out;
+        }
+        total += r.value.length;
+        if (total > max) { reader.cancel(); throw new Error('展開後の大きさが上限を超えています'); }
+        chunks.push(r.value);
+        return pump();
+      });
+    }
+    return pump();
   }
 
-  function readEntry(b, e) {
+  function readEntry(b, e, max) {
+    max = max || MAX_ENTRY;
     var lo = e.local;
     if (u32(b, lo) !== 0x04034b50) return Promise.reject(new Error('ZIP が壊れています'));
+    if (e.usize > max) return Promise.reject(new Error('展開後の大きさが上限を超えています'));
     var start = lo + 30 + u16(b, lo + 26) + u16(b, lo + 28);
     var data = b.subarray(start, start + e.csize);
-    if (e.method === 0) return Promise.resolve(data);
-    if (e.method === 8) return inflateRaw(data);
+    if (e.method === 0) return data.length > max ? Promise.reject(new Error('展開後の大きさが上限を超えています')) : Promise.resolve(data);
+    if (e.method === 8) return inflateRaw(data, max);
     return Promise.reject(new Error('未対応の圧縮方式'));
   }
 
   var ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
   function unxml(s) {
     return s.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-z]+);/g, function (m, e) {
-      if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+      if (e[0] === '#') {
+        var cp = e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        // 範囲外・サロゲートは置換文字にする（例外で同じシートの他の値まで読めなくならないように）
+        return cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ? '�' : String.fromCodePoint(cp);
+      }
       return ENT[e] || m;
     }).replace(/_x([0-9A-Fa-f]{4})_/g, function (_, h) { return String.fromCharCode(parseInt(h, 16)); });
   }
@@ -168,13 +193,220 @@
     return { rows: dense, cols: maxCol, truncated: truncated };
   }
 
+  // ---------- フォームのチェックボックス ----------
+  // 位置・文字・状態は VML（旧形式の図形）にある。Excel 2010 以降は ctrlProps にも状態を書くので、あればそちらを使う
+
+  /** "xl/worksheets/sheet1.xml" と "../drawings/x.vml" から "xl/drawings/x.vml" を作る */
+  function resolvePath(base, target) {
+    if (!target) return '';
+    if (target[0] === '/') return target.slice(1);
+    var parts = base.split('/');
+    parts.pop();
+    target.split('/').forEach(function (p) {
+      if (p === '..') parts.pop();
+      else if (p && p !== '.') parts.push(p);
+    });
+    return parts.join('/');
+  }
+  function relsPath(path) {
+    var i = path.lastIndexOf('/');
+    return path.slice(0, i + 1) + '_rels/' + path.slice(i + 1) + '.rels';
+  }
+  function parseRels(xml, base) {
+    var out = {};
+    var re = /<Relationship\b[^>]*>/g, m;
+    while ((m = re.exec(xml || ''))) out[attr(m[0], 'Id')] = resolvePath(base, attr(m[0], 'Target'));
+    return out;
+  }
+  // 外から届く xlsx を読むので、図形まわりは正規表現の後戻りに頼らず indexOf で前へ進むだけの走査にする
+  // （閉じタグの無い要素や長い属性値を並べた細工で、読み込みが固まらないように）
+  var MAX_VML = 4 * 1024 * 1024;   // VML の展開後の上限
+  var MAX_CTRL = 64 * 1024;        // ctrlProp 1 つの上限
+  var MAX_CHECKS = 500;            // 1 シートで読むチェックボックスの数
+
+  /** 開始タグ "<name" の直後が名前の続きでないか（"<control" と "<controls" を分ける） */
+  function tagEndsAt(xml, i) { var c = xml.charAt(i); return c === '' || c === '>' || c === '/' || /\s/.test(c); }
+
+  /**
+   * 要素 <name ...>...</name> と <name .../> を順に返す。{ attrs: 開始タグの属性部, inner: 中身（自己終了なら ''） }
+   * 閉じタグが見つからなければそこで打ち切る（以降を何度も走査しない）
+   */
+  function elements(xml, name, limit) {
+    var out = [];
+    var open = '<' + name, close = '</' + name + '>';
+    var pos = 0;
+    while (out.length < (limit || Infinity)) {
+      var i = xml.indexOf(open, pos);
+      if (i < 0) break;
+      if (!tagEndsAt(xml, i + open.length)) { pos = i + open.length; continue; }
+      var gt = xml.indexOf('>', i);
+      if (gt < 0) break;
+      var attrs = xml.slice(i + open.length, gt);
+      if (attrs.charAt(attrs.length - 1) === '/') { out.push({ attrs: attrs.slice(0, -1), inner: '' }); pos = gt + 1; continue; }
+      var j = xml.indexOf(close, gt);
+      if (j < 0) break;
+      out.push({ attrs: attrs, inner: xml.slice(gt + 1, j) });
+      pos = j + close.length;
+    }
+    return out;
+  }
+  function tagText(xml, name) { var e = elements(xml, name, 1)[0]; return e ? e.inner : null; }
+  function tagAttrs(xml, name) { var e = elements(xml, name, 1)[0]; return e ? ' ' + e.attrs : null; }
+
+  /** 図形の中の文字（タグを除く）。< から > までを飛ばす。> が無ければ残りを捨てる */
+  function plainText(xml) {
+    var s = xml.replace(/<br\s*\/?>/gi, '\n');
+    var out = '', pos = 0;
+    while (pos < s.length) {
+      var lt = s.indexOf('<', pos);
+      if (lt < 0) { out += s.slice(pos); break; }
+      out += s.slice(pos, lt);
+      var gt = s.indexOf('>', lt);
+      if (gt < 0) break;
+      pos = gt + 1;
+    }
+    return unxml(out).replace(/[ \t\r\n]+/g, ' ').trim();
+  }
+  /** 属性の生の値（unxml しない）。"_x0000_s1025" を文字に戻さないため */
+  function rawAttr(attrs, name) {
+    var key = name + '="';
+    var i = attrs.indexOf(' ' + key);
+    if (i < 0) i = attrs.indexOf('\t' + key);
+    if (i < 0) i = attrs.indexOf('\n' + key);
+    if (i < 0) return null;
+    var start = i + 1 + key.length;
+    var end = attrs.indexOf('"', start);
+    return end < 0 ? null : attrs.slice(start, end);
+  }
+  /** 文字列の末尾に続く数字（"_x0000_s1025" → "1025"）。無ければ null */
+  function trailingDigits(s) {
+    var i = s.length;
+    while (i > 0 && s.charCodeAt(i - 1) >= 48 && s.charCodeAt(i - 1) <= 57) i--;
+    return i < s.length ? s.slice(i) : null;
+  }
+
+  /** VML からチェックボックスを集める。shapeId（数値の文字列）→ {label, checked, row, col, row2} */
+  function vmlChecks(xml) {
+    var out = {}, n = 0;
+    var shapes = elements(xml || '', 'v:shape');
+    for (var k = 0; k < shapes.length && n < MAX_CHECKS; k++) {
+      var sh = shapes[k];
+      var cdAttrs = tagAttrs(sh.inner, 'x:ClientData');
+      if (!cdAttrs || !/ObjectType="Checkbox"/i.test(cdAttrs)) continue;
+      var cd = tagText(sh.inner, 'x:ClientData') || '';
+      // シートの <control shapeId> と結ぶ番号。o:spid を先に見る（id が "Check_x0020_Box_x0020_1" のような名前のことがある）
+      var raw = rawAttr(' ' + sh.attrs, 'o:spid') || rawAttr(' ' + sh.attrs, 'id') || '';
+      var id = trailingDigits(raw) || 'v' + k;
+      var anchor = (tagText(cd, 'x:Anchor') || '').split(',').map(function (s) { return parseInt(s, 10); });
+      var ck = tagText(cd, 'x:Checked');
+      var tb = tagText(sh.inner, 'v:textbox');
+      out[id] = {
+        label: tb ? plainText(tb) : '',
+        checked: ck != null && ck.trim() === '1',
+        col: isFinite(anchor[0]) ? anchor[0] : -1,
+        row: isFinite(anchor[2]) ? anchor[2] : -1,
+        row2: isFinite(anchor[6]) ? anchor[6] : -1
+      };
+      n++;
+    }
+    return out;
+  }
+
+  /** シートの <control> を集める（mc:AlternateContent の Choice と Fallback で重なるので shapeId でまとめる） */
+  function sheetControls(xml) {
+    var out = {}, n = 0;
+    var list = elements(xml || '', 'control');
+    for (var k = 0; k < list.length && n < MAX_CHECKS; k++) {
+      var c = list[k];
+      var id = attr(' ' + c.attrs, 'shapeId');
+      if (!id || out[id]) continue;
+      // Excel は <anchor><from><xdr:col>… と書く（from に接頭辞が無い）。接頭辞つきにも備える
+      var from = tagText(c.inner, 'from') || tagText(c.inner, 'xdr:from') || '';
+      var col = tagText(from, 'xdr:col'), row = tagText(from, 'xdr:row');
+      out[id] = { rid: attr(' ' + c.attrs, 'r:id'), name: attr(' ' + c.attrs, 'name') || '', col: col != null ? parseInt(col, 10) : -1, row: row != null ? parseInt(row, 10) : -1 };
+      n++;
+    }
+    return out;
+  }
+
+  /** 文字の無いチェックボックスは、置いてあるセルから右へ探して最初の文字をラベルにする */
+  function labelFromCells(rows, row, col) {
+    var r = rows[row];
+    if (!r || col < 0) return '';
+    for (var c = col; c < Math.min(r.length, col + 6); c++) {
+      var v = (r[c] || '').trim();
+      if (v && !/^(TRUE|FALSE)$/.test(v)) return v;
+    }
+    return '';
+  }
+
+  /**
+   * @param {{rows:string[][]}} sheet
+   * @param {object} vml vmlChecks の結果
+   * @param {object} controls sheetControls の結果
+   * @param {object} ctrlXml rId → ctrlProp の XML
+   * @returns {{label:string, checked:boolean, row:number, col:number}[]} row・col は 0 始まり
+   */
+  function buildChecks(sheet, vml, controls, ctrlXml) {
+    var ids = Object.keys(vml);
+    var seen = {};
+    ids.forEach(function (id) { seen[id] = 1; });
+    Object.keys(controls).forEach(function (id) {
+      if (seen[id]) return;
+      var pr = ctrlXml[controls[id].rid] || '';
+      if (/objectType="CheckBox"/i.test(pr) && ids.length < MAX_CHECKS) {
+        vml[id] = { label: '', checked: false, col: controls[id].col, row: controls[id].row, row2: -1 };
+        seen[id] = 1;
+        ids.push(id);
+      }
+    });
+    var out = ids.map(function (id) {
+      var v = vml[id];
+      var ctl = controls[id];
+      var checked = v.checked;
+      if (ctl && ctrlXml[ctl.rid]) {
+        var pr = /<formControlPr\b[^>]*>/.exec(ctrlXml[ctl.rid]);
+        if (pr) checked = attr(pr[0], 'checked') === 'Checked';
+      }
+      var label = v.label || labelFromCells(sheet.rows, v.row, v.col) || (v.row2 >= 0 && v.row2 !== v.row ? labelFromCells(sheet.rows, v.row2, v.col) : '');
+      return { label: label, checked: checked, row: v.row, col: v.col };
+    });
+    out.sort(function (a, b) { return a.row - b.row || a.col - b.col; });
+    return out;
+  }
+
+  /** シート 1 枚のチェックボックスを読む。無ければ [] */
+  function readChecks(get, path, sheetXml, sheet) {
+    if (!/<legacyDrawing\b|<control\b/.test(sheetXml)) return Promise.resolve([]);
+    return get(relsPath(path)).then(function (relXml) {
+      var rels = parseRels(relXml, path);
+      var ld = tagAttrs(sheetXml, 'legacyDrawing');
+      var controls = sheetControls(sheetXml);
+      // 同じ ctrlProp を何度も展開しない
+      var rids = [], has = {};
+      Object.keys(controls).forEach(function (k) { var r = controls[k].rid; if (r && rels[r] && !has[r]) { has[r] = 1; rids.push(r); } });
+      // ctrlProp は 1 つずつ失敗を受け止める（1 つ壊れていても VML の結果は使う）
+      var ctrls = rids.map(function (r) { return get(rels[r], MAX_CTRL).catch(function () { return ''; }); });
+      var vmlP = ld ? get(rels[attr(ld, 'r:id')] || '', MAX_VML).catch(function () { return ''; }) : Promise.resolve('');
+      return Promise.all([vmlP].concat(ctrls)).then(function (xs) {
+        var ctrlXml = {};
+        rids.forEach(function (r, i) { ctrlXml[r] = xs[i + 1]; });
+        return buildChecks(sheet, vmlChecks(xs[0]), controls, ctrlXml);
+      });
+    }).catch(function () { return []; });
+  }
+
   /**
    * @param {Uint8Array} bytes
-   * @returns {Promise<{sheets: {name:string, rows:string[][], cols:number, truncated:boolean}[], text:string}>}
+   * @returns {Promise<{sheets: {name:string, rows:string[][], cols:number, truncated:boolean, checks:{label:string, checked:boolean, row:number, col:number}[]}[], text:string}>}
    */
   function read(bytes) {
     var zip = listZip(bytes);
-    function get(name) { return zip[name] ? readEntry(bytes, zip[name]).then(function (b) { return new TextDecoder('utf-8').decode(b); }) : Promise.resolve(''); }
+    function get(name, max) {
+      return name && Object.prototype.hasOwnProperty.call(zip, name)
+        ? readEntry(bytes, zip[name], max).then(function (b) { return new TextDecoder('utf-8').decode(b); })
+        : Promise.resolve('');
+    }
     if (!zip['xl/workbook.xml']) return Promise.reject(new Error('xlsx ではありません'));
     return Promise.all([get('xl/workbook.xml'), get('xl/_rels/workbook.xml.rels'), get('xl/sharedStrings.xml'), get('xl/styles.xml')]).then(function (r) {
       var wb = r[0], rels = r[1], ssXml = r[2], stXml = r[3];
@@ -199,6 +431,11 @@
           p.hidden = s.hidden;
           return p;
         });
+        return Promise.all(sheets.map(function (p, i) { return readChecks(get, sheetDefs[i].path, xmls[i], p); })).then(function (cs) {
+          cs.forEach(function (c, i) { sheets[i].checks = c; });
+          return sheets;
+        });
+      }).then(function (sheets) {
         var text = sheets.map(function (s) {
           return '[' + s.name + ']\n' + s.rows.map(function (row) {
             return row.filter(function (x) { return x !== ''; }).join('\t');

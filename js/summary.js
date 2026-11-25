@@ -8,6 +8,7 @@
 
   var NONE = '__none__';
   var NO_SS = '（SS 不明）';
+  var NO_BURDEN = '（負担区分なし）';
 
   function idOf(m, axis) { return (m.cls && m.cls[axis] && m.cls[axis].categoryId) || NONE; }
 
@@ -109,6 +110,32 @@
       if ((a.ss === NO_SS) !== (b.ss === NO_SS)) return a.ss === NO_SS ? 1 : -1; // 不明は最後
       return b.total - a.total || (a.ss < b.ss ? -1 : 1);
     });
+    var max = list.reduce(function (a, r) { return Math.max(a, r.total); }, 0);
+    return { cols: cols, rows: list, max: max, total: rows.length };
+  }
+
+  /**
+   * 負担区分別（行＝order の順、無いものは NO_BURDEN で最後。件数 0 の行は出さない。列＝主カテゴリ）
+   * @param {function} nameOf メール → 負担区分（無ければ ''）
+   * @param {string[]} order 負担区分の並び（ENEOS・運営店・調査次第）
+   */
+  function byBurden(rows, mainCats, nameOf, order) {
+    var cols = axisKeys(rows, mainCats, 'main');
+    var known = {};
+    cols.forEach(function (k) { known[k] = 1; });
+    var map = {};
+    rows.forEach(function (m) {
+      var s = nameOf(m) || NO_BURDEN;
+      var c = idOf(m, 'main');
+      if (!known[c]) c = NONE;
+      if (!map[s]) { map[s] = { total: 0 }; cols.forEach(function (k) { map[s][k] = 0; }); }
+      map[s][c]++;
+      map[s].total++;
+    });
+    var keys = (order || []).filter(function (k) { return map[k]; });
+    Object.keys(map).forEach(function (k) { if (keys.indexOf(k) < 0 && k !== NO_BURDEN) keys.push(k); });
+    if (map[NO_BURDEN]) keys.push(NO_BURDEN);
+    var list = keys.map(function (k) { return { name: k, counts: map[k], total: map[k].total }; });
     var max = list.reduce(function (a, r) { return Math.max(a, r.total); }, 0);
     return { cols: cols, rows: list, max: max, total: rows.length };
   }
@@ -263,7 +290,7 @@
   }
 
   var api = {
-    NONE: NONE, NO_SS: NO_SS, matrix: matrix, monthly: monthly, bySs: bySs, tableToCsv: tableToCsv, monthOf: monthOf,
+    NONE: NONE, NO_SS: NO_SS, NO_BURDEN: NO_BURDEN, matrix: matrix, monthly: monthly, bySs: bySs, byBurden: byBurden, tableToCsv: tableToCsv, monthOf: monthOf,
     shares: shares, matrixShares: matrixShares, largestRemainder: largestRemainder, allocate: allocate,
     stratumKeyOf: stratumKeyOf, sample: sample
   };

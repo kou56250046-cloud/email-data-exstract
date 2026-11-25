@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- メールは機密。外部への通信を一切させない -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-4wp7SOxJX93zL41inRH/EPiD6yQe9N9GIicPtVjgR5c=' 'sha256-71Mso4GklhV8uRC+/m4x+xVngYmpIJLnPL1BQwxFuvg=' 'sha256-sVP/zWQr8pY94Jkq0NVU4EOMhv/sKJtjqXeOEHtlCts=' 'sha256-2NgdWNULD2OqsA3LdXD/fwDYW1ckU/vNFVdpLRAmuME=' 'sha256-33nAZvgT+XFSWbPNvIio7OdmLHs+MN2e9cwgroX7idw=' 'sha256-IBoAYrWMKRvyGkMzXy3tJymTqzKfedl519hLTeFTtfM=' 'sha256-x4TC8ojOyn9BgKN37visQAex+85IeMrqVFHMrsHtsTY=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-v2+tul2u8aVoiBlXc5jBopcU1axxUfBKsVoeoi6AUHU=' 'sha256-nF/emhC7NqeQkzpEP0YNJVTdYj/hxvBNO3pA+JlrvYI=' 'sha256-+yL5M3dJtH+UOY1jswmKQLXcBe23icQS4ESNJ0yA844='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xed40NYXBK/3DMm69gTXD36yMDc5Z3jq+rapSrHeow0=' 'sha256-TnVrBoiCv9UuNh2hyB1iAK1xph0S9pThWkpTCxAXIhE=' 'sha256-4wp7SOxJX93zL41inRH/EPiD6yQe9N9GIicPtVjgR5c=' 'sha256-wSWnIu3+57iT0SnTR3HloFMkte1hLhVcQ8yWNC2Lfus=' 'sha256-dhzKnDoCyYwJOvLX2HJ+WbaozTziASUY/38to3kB41Q=' 'sha256-RwvT3XHO6WjjKNy9hBFZXbhYbKXpZL6r0gtTA+P0A4g=' 'sha256-nmC+FhIVEpamFXHpqm/XswB060aDbkOqCcp62cm7SX0=' 'sha256-IBoAYrWMKRvyGkMzXy3tJymTqzKfedl519hLTeFTtfM=' 'sha256-h/ozdTDhs4TNeyKBVa9iWwwwdyC9YYVppzRPu5kAnBg=' 'sha256-YPl5R7uPeJg94NAag85bXooBwbAl9GvpfuQCZm3CRiM=' 'sha256-v2+tul2u8aVoiBlXc5jBopcU1axxUfBKsVoeoi6AUHU=' 'sha256-vcW06qHLrFOZBtbOvAnetYHRB3a9sSCad59Cv/436M8=' 'sha256-2kzieaoIXQWY+AQqk7FtEM/rYt9ItSwKRPJoyX6xjG4='; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src blob: data:; connect-src 'none'; form-action 'none'">
 <title>msg メール抽出・分類</title>
 <style>
 :root {
@@ -247,6 +247,7 @@ body.with-detail .list .snip { display: none; }
 .chip.none.sub { border-color: var(--line); }
 .list .ss { font-size: 11.5px; color: var(--sub); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list .ss::before { content: "SS "; color: #adb5bd; }
+.list .ss.burden::before { content: none; }
 .list .att .xl.pdf { background: #fff4e6; color: #d9480f; }
 
 /* 詳細の 2 軸 */
@@ -335,6 +336,13 @@ body.with-detail .list .snip { display: none; }
 /* 重複の件数 */
 .dup-note { margin: -8px 0 14px; padding: 6px 8px; background: #edf2ff; border-radius: 6px; color: #364fc7; line-height: 1.6; }
 .dup-note .link { margin-left: 4px; color: inherit; font-weight: bold; }
+
+/* 詳細: 補修依頼書の欄 */
+.form-box { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--line, #dee2e6); border-radius: 6px; background: #f8f9fa; }
+.form-box h3 { margin: 0 0 4px; font-size: 12px; color: var(--sub); }
+.form-fields { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; font-size: 12.5px; }
+.form-fields dt { color: var(--sub); }
+.form-fields dd { margin: 0; white-space: pre-wrap; word-break: break-word; }
 </style>
 </head>
 <body>
@@ -376,6 +384,7 @@ body.with-detail .list .snip { display: none; }
       <input type="search" id="q" placeholder="件名・本文・送信者・添付名で検索" aria-label="検索">
       <select id="subQ" aria-label="副カテゴリで絞り込み"></select>
       <select id="ssQ" aria-label="SS で絞り込み"></select>
+      <select id="burdenQ" aria-label="負担区分で絞り込み"></select>
       <input type="search" id="fromQ" placeholder="送信者" aria-label="送信者で絞り込み">
       <label>期間 <input type="date" id="dateFrom" aria-label="開始日"> 〜 <input type="date" id="dateTo" aria-label="終了日"></label>
       <select id="attQ" aria-label="添付">
@@ -1504,36 +1513,61 @@ body.with-detail .list .snip { display: none; }
       if (u32(b, p) !== 0x02014b50) break;
       var method = u16(b, p + 10);
       var csize = u32(b, p + 20);
+      var usize = u32(b, p + 24);
       var nlen = u16(b, p + 28), xlen = u16(b, p + 30), clen = u16(b, p + 32);
       var local = u32(b, p + 42);
       var name = utf8.decode(b.subarray(p + 46, p + 46 + nlen));
-      out[name.replace(/^\//, '')] = { method: method, csize: csize, local: local };
+      out[name.replace(/^\//, '')] = { method: method, csize: csize, usize: usize, local: local };
       p += 46 + nlen + xlen + clen;
     }
     return out;
   }
 
-  function inflateRaw(data) {
+  // 展開後の大きさの上限（圧縮爆弾でタブが落ちないように）。図形の VML などはもっと小さくてよい
+  var MAX_ENTRY = 64 * 1024 * 1024;
+
+  /** 展開しながら大きさを数え、max を超えたら打ち切って失敗にする */
+  function inflateRaw(data, max) {
     if (typeof DecompressionStream === 'undefined') return Promise.reject(new Error('このブラウザは展開に対応していません'));
     var ds = new DecompressionStream('deflate-raw');
-    var stream = new Blob([data]).stream().pipeThrough(ds);
-    return new Response(stream).arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
+    var reader = new Blob([data]).stream().pipeThrough(ds).getReader();
+    var chunks = [], total = 0;
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.done) {
+          var out = new Uint8Array(total), o = 0;
+          chunks.forEach(function (c) { out.set(c, o); o += c.length; });
+          return out;
+        }
+        total += r.value.length;
+        if (total > max) { reader.cancel(); throw new Error('展開後の大きさが上限を超えています'); }
+        chunks.push(r.value);
+        return pump();
+      });
+    }
+    return pump();
   }
 
-  function readEntry(b, e) {
+  function readEntry(b, e, max) {
+    max = max || MAX_ENTRY;
     var lo = e.local;
     if (u32(b, lo) !== 0x04034b50) return Promise.reject(new Error('ZIP が壊れています'));
+    if (e.usize > max) return Promise.reject(new Error('展開後の大きさが上限を超えています'));
     var start = lo + 30 + u16(b, lo + 26) + u16(b, lo + 28);
     var data = b.subarray(start, start + e.csize);
-    if (e.method === 0) return Promise.resolve(data);
-    if (e.method === 8) return inflateRaw(data);
+    if (e.method === 0) return data.length > max ? Promise.reject(new Error('展開後の大きさが上限を超えています')) : Promise.resolve(data);
+    if (e.method === 8) return inflateRaw(data, max);
     return Promise.reject(new Error('未対応の圧縮方式'));
   }
 
   var ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
   function unxml(s) {
     return s.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-z]+);/g, function (m, e) {
-      if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+      if (e[0] === '#') {
+        var cp = e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        // 範囲外・サロゲートは置換文字にする（例外で同じシートの他の値まで読めなくならないように）
+        return cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ? '�' : String.fromCodePoint(cp);
+      }
       return ENT[e] || m;
     }).replace(/_x([0-9A-Fa-f]{4})_/g, function (_, h) { return String.fromCharCode(parseInt(h, 16)); });
   }
@@ -1646,13 +1680,220 @@ body.with-detail .list .snip { display: none; }
     return { rows: dense, cols: maxCol, truncated: truncated };
   }
 
+  // ---------- フォームのチェックボックス ----------
+  // 位置・文字・状態は VML（旧形式の図形）にある。Excel 2010 以降は ctrlProps にも状態を書くので、あればそちらを使う
+
+  /** "xl/worksheets/sheet1.xml" と "../drawings/x.vml" から "xl/drawings/x.vml" を作る */
+  function resolvePath(base, target) {
+    if (!target) return '';
+    if (target[0] === '/') return target.slice(1);
+    var parts = base.split('/');
+    parts.pop();
+    target.split('/').forEach(function (p) {
+      if (p === '..') parts.pop();
+      else if (p && p !== '.') parts.push(p);
+    });
+    return parts.join('/');
+  }
+  function relsPath(path) {
+    var i = path.lastIndexOf('/');
+    return path.slice(0, i + 1) + '_rels/' + path.slice(i + 1) + '.rels';
+  }
+  function parseRels(xml, base) {
+    var out = {};
+    var re = /<Relationship\b[^>]*>/g, m;
+    while ((m = re.exec(xml || ''))) out[attr(m[0], 'Id')] = resolvePath(base, attr(m[0], 'Target'));
+    return out;
+  }
+  // 外から届く xlsx を読むので、図形まわりは正規表現の後戻りに頼らず indexOf で前へ進むだけの走査にする
+  // （閉じタグの無い要素や長い属性値を並べた細工で、読み込みが固まらないように）
+  var MAX_VML = 4 * 1024 * 1024;   // VML の展開後の上限
+  var MAX_CTRL = 64 * 1024;        // ctrlProp 1 つの上限
+  var MAX_CHECKS = 500;            // 1 シートで読むチェックボックスの数
+
+  /** 開始タグ "<name" の直後が名前の続きでないか（"<control" と "<controls" を分ける） */
+  function tagEndsAt(xml, i) { var c = xml.charAt(i); return c === '' || c === '>' || c === '/' || /\s/.test(c); }
+
+  /**
+   * 要素 <name ...>...</name> と <name .../> を順に返す。{ attrs: 開始タグの属性部, inner: 中身（自己終了なら ''） }
+   * 閉じタグが見つからなければそこで打ち切る（以降を何度も走査しない）
+   */
+  function elements(xml, name, limit) {
+    var out = [];
+    var open = '<' + name, close = '</' + name + '>';
+    var pos = 0;
+    while (out.length < (limit || Infinity)) {
+      var i = xml.indexOf(open, pos);
+      if (i < 0) break;
+      if (!tagEndsAt(xml, i + open.length)) { pos = i + open.length; continue; }
+      var gt = xml.indexOf('>', i);
+      if (gt < 0) break;
+      var attrs = xml.slice(i + open.length, gt);
+      if (attrs.charAt(attrs.length - 1) === '/') { out.push({ attrs: attrs.slice(0, -1), inner: '' }); pos = gt + 1; continue; }
+      var j = xml.indexOf(close, gt);
+      if (j < 0) break;
+      out.push({ attrs: attrs, inner: xml.slice(gt + 1, j) });
+      pos = j + close.length;
+    }
+    return out;
+  }
+  function tagText(xml, name) { var e = elements(xml, name, 1)[0]; return e ? e.inner : null; }
+  function tagAttrs(xml, name) { var e = elements(xml, name, 1)[0]; return e ? ' ' + e.attrs : null; }
+
+  /** 図形の中の文字（タグを除く）。< から > までを飛ばす。> が無ければ残りを捨てる */
+  function plainText(xml) {
+    var s = xml.replace(/<br\s*\/?>/gi, '\n');
+    var out = '', pos = 0;
+    while (pos < s.length) {
+      var lt = s.indexOf('<', pos);
+      if (lt < 0) { out += s.slice(pos); break; }
+      out += s.slice(pos, lt);
+      var gt = s.indexOf('>', lt);
+      if (gt < 0) break;
+      pos = gt + 1;
+    }
+    return unxml(out).replace(/[ \t\r\n]+/g, ' ').trim();
+  }
+  /** 属性の生の値（unxml しない）。"_x0000_s1025" を文字に戻さないため */
+  function rawAttr(attrs, name) {
+    var key = name + '="';
+    var i = attrs.indexOf(' ' + key);
+    if (i < 0) i = attrs.indexOf('\t' + key);
+    if (i < 0) i = attrs.indexOf('\n' + key);
+    if (i < 0) return null;
+    var start = i + 1 + key.length;
+    var end = attrs.indexOf('"', start);
+    return end < 0 ? null : attrs.slice(start, end);
+  }
+  /** 文字列の末尾に続く数字（"_x0000_s1025" → "1025"）。無ければ null */
+  function trailingDigits(s) {
+    var i = s.length;
+    while (i > 0 && s.charCodeAt(i - 1) >= 48 && s.charCodeAt(i - 1) <= 57) i--;
+    return i < s.length ? s.slice(i) : null;
+  }
+
+  /** VML からチェックボックスを集める。shapeId（数値の文字列）→ {label, checked, row, col, row2} */
+  function vmlChecks(xml) {
+    var out = {}, n = 0;
+    var shapes = elements(xml || '', 'v:shape');
+    for (var k = 0; k < shapes.length && n < MAX_CHECKS; k++) {
+      var sh = shapes[k];
+      var cdAttrs = tagAttrs(sh.inner, 'x:ClientData');
+      if (!cdAttrs || !/ObjectType="Checkbox"/i.test(cdAttrs)) continue;
+      var cd = tagText(sh.inner, 'x:ClientData') || '';
+      // シートの <control shapeId> と結ぶ番号。o:spid を先に見る（id が "Check_x0020_Box_x0020_1" のような名前のことがある）
+      var raw = rawAttr(' ' + sh.attrs, 'o:spid') || rawAttr(' ' + sh.attrs, 'id') || '';
+      var id = trailingDigits(raw) || 'v' + k;
+      var anchor = (tagText(cd, 'x:Anchor') || '').split(',').map(function (s) { return parseInt(s, 10); });
+      var ck = tagText(cd, 'x:Checked');
+      var tb = tagText(sh.inner, 'v:textbox');
+      out[id] = {
+        label: tb ? plainText(tb) : '',
+        checked: ck != null && ck.trim() === '1',
+        col: isFinite(anchor[0]) ? anchor[0] : -1,
+        row: isFinite(anchor[2]) ? anchor[2] : -1,
+        row2: isFinite(anchor[6]) ? anchor[6] : -1
+      };
+      n++;
+    }
+    return out;
+  }
+
+  /** シートの <control> を集める（mc:AlternateContent の Choice と Fallback で重なるので shapeId でまとめる） */
+  function sheetControls(xml) {
+    var out = {}, n = 0;
+    var list = elements(xml || '', 'control');
+    for (var k = 0; k < list.length && n < MAX_CHECKS; k++) {
+      var c = list[k];
+      var id = attr(' ' + c.attrs, 'shapeId');
+      if (!id || out[id]) continue;
+      // Excel は <anchor><from><xdr:col>… と書く（from に接頭辞が無い）。接頭辞つきにも備える
+      var from = tagText(c.inner, 'from') || tagText(c.inner, 'xdr:from') || '';
+      var col = tagText(from, 'xdr:col'), row = tagText(from, 'xdr:row');
+      out[id] = { rid: attr(' ' + c.attrs, 'r:id'), name: attr(' ' + c.attrs, 'name') || '', col: col != null ? parseInt(col, 10) : -1, row: row != null ? parseInt(row, 10) : -1 };
+      n++;
+    }
+    return out;
+  }
+
+  /** 文字の無いチェックボックスは、置いてあるセルから右へ探して最初の文字をラベルにする */
+  function labelFromCells(rows, row, col) {
+    var r = rows[row];
+    if (!r || col < 0) return '';
+    for (var c = col; c < Math.min(r.length, col + 6); c++) {
+      var v = (r[c] || '').trim();
+      if (v && !/^(TRUE|FALSE)$/.test(v)) return v;
+    }
+    return '';
+  }
+
+  /**
+   * @param {{rows:string[][]}} sheet
+   * @param {object} vml vmlChecks の結果
+   * @param {object} controls sheetControls の結果
+   * @param {object} ctrlXml rId → ctrlProp の XML
+   * @returns {{label:string, checked:boolean, row:number, col:number}[]} row・col は 0 始まり
+   */
+  function buildChecks(sheet, vml, controls, ctrlXml) {
+    var ids = Object.keys(vml);
+    var seen = {};
+    ids.forEach(function (id) { seen[id] = 1; });
+    Object.keys(controls).forEach(function (id) {
+      if (seen[id]) return;
+      var pr = ctrlXml[controls[id].rid] || '';
+      if (/objectType="CheckBox"/i.test(pr) && ids.length < MAX_CHECKS) {
+        vml[id] = { label: '', checked: false, col: controls[id].col, row: controls[id].row, row2: -1 };
+        seen[id] = 1;
+        ids.push(id);
+      }
+    });
+    var out = ids.map(function (id) {
+      var v = vml[id];
+      var ctl = controls[id];
+      var checked = v.checked;
+      if (ctl && ctrlXml[ctl.rid]) {
+        var pr = /<formControlPr\b[^>]*>/.exec(ctrlXml[ctl.rid]);
+        if (pr) checked = attr(pr[0], 'checked') === 'Checked';
+      }
+      var label = v.label || labelFromCells(sheet.rows, v.row, v.col) || (v.row2 >= 0 && v.row2 !== v.row ? labelFromCells(sheet.rows, v.row2, v.col) : '');
+      return { label: label, checked: checked, row: v.row, col: v.col };
+    });
+    out.sort(function (a, b) { return a.row - b.row || a.col - b.col; });
+    return out;
+  }
+
+  /** シート 1 枚のチェックボックスを読む。無ければ [] */
+  function readChecks(get, path, sheetXml, sheet) {
+    if (!/<legacyDrawing\b|<control\b/.test(sheetXml)) return Promise.resolve([]);
+    return get(relsPath(path)).then(function (relXml) {
+      var rels = parseRels(relXml, path);
+      var ld = tagAttrs(sheetXml, 'legacyDrawing');
+      var controls = sheetControls(sheetXml);
+      // 同じ ctrlProp を何度も展開しない
+      var rids = [], has = {};
+      Object.keys(controls).forEach(function (k) { var r = controls[k].rid; if (r && rels[r] && !has[r]) { has[r] = 1; rids.push(r); } });
+      // ctrlProp は 1 つずつ失敗を受け止める（1 つ壊れていても VML の結果は使う）
+      var ctrls = rids.map(function (r) { return get(rels[r], MAX_CTRL).catch(function () { return ''; }); });
+      var vmlP = ld ? get(rels[attr(ld, 'r:id')] || '', MAX_VML).catch(function () { return ''; }) : Promise.resolve('');
+      return Promise.all([vmlP].concat(ctrls)).then(function (xs) {
+        var ctrlXml = {};
+        rids.forEach(function (r, i) { ctrlXml[r] = xs[i + 1]; });
+        return buildChecks(sheet, vmlChecks(xs[0]), controls, ctrlXml);
+      });
+    }).catch(function () { return []; });
+  }
+
   /**
    * @param {Uint8Array} bytes
-   * @returns {Promise<{sheets: {name:string, rows:string[][], cols:number, truncated:boolean}[], text:string}>}
+   * @returns {Promise<{sheets: {name:string, rows:string[][], cols:number, truncated:boolean, checks:{label:string, checked:boolean, row:number, col:number}[]}[], text:string}>}
    */
   function read(bytes) {
     var zip = listZip(bytes);
-    function get(name) { return zip[name] ? readEntry(bytes, zip[name]).then(function (b) { return new TextDecoder('utf-8').decode(b); }) : Promise.resolve(''); }
+    function get(name, max) {
+      return name && Object.prototype.hasOwnProperty.call(zip, name)
+        ? readEntry(bytes, zip[name], max).then(function (b) { return new TextDecoder('utf-8').decode(b); })
+        : Promise.resolve('');
+    }
     if (!zip['xl/workbook.xml']) return Promise.reject(new Error('xlsx ではありません'));
     return Promise.all([get('xl/workbook.xml'), get('xl/_rels/workbook.xml.rels'), get('xl/sharedStrings.xml'), get('xl/styles.xml')]).then(function (r) {
       var wb = r[0], rels = r[1], ssXml = r[2], stXml = r[3];
@@ -1677,6 +1918,11 @@ body.with-detail .list .snip { display: none; }
           p.hidden = s.hidden;
           return p;
         });
+        return Promise.all(sheets.map(function (p, i) { return readChecks(get, sheetDefs[i].path, xmls[i], p); })).then(function (cs) {
+          cs.forEach(function (c, i) { sheets[i].checks = c; });
+          return sheets;
+        });
+      }).then(function (sheets) {
         var text = sheets.map(function (s) {
           return '[' + s.name + ']\n' + s.rows.map(function (row) {
             return row.filter(function (x) { return x !== ''; }).join('\t');
@@ -1713,6 +1959,10 @@ body.with-detail .list .snip { display: none; }
     to: '宛先（To/Cc）',
     attachmentName: '添付ファイル名',
     xlsx: '添付xlsxの内容',
+    formChecked: '補修依頼書: 依頼内容のチェック',
+    formDetail: '補修依頼書: 補修内容・状況内容',
+    burden: '補修依頼書: 負担区分',
+    content: '件名・本文・補修内容・状況内容',
     hasAttachment: '添付あり'
   };
   var OPS = {
@@ -1742,6 +1992,12 @@ body.with-detail .list .snip { display: none; }
       case 'to': return addrText(mail.to) + ' ' + addrText(mail.cc);
       case 'attachmentName': return (mail.attachments || []).map(function (a) { return a.name; }).join(' ');
       case 'xlsx': return mail.xlsxText || '';
+      // 補修依頼書の欄（js/fields.js の extractForm）。チェックは 1 行に 1 項目
+      case 'formChecked': return mail.form ? mail.form.checked.join('\n') : '';
+      case 'formDetail': return mail.form ? mail.form.repair + '\n' + mail.form.status : '';
+      case 'burden': return mail.form ? mail.form.burden : '';
+      // 補修依頼書の選択肢の文字（チェックの無いものも含む）を拾わないよう、xlsx は自由記述の欄だけ
+      case 'content': return (mail.subject || '') + '\n' + (mail.bodyText || '') + (mail.form ? '\n' + mail.form.repair + '\n' + mail.form.status : '');
       case 'any': return (mail.subject || '') + '\n' + (mail.from.name || '') + ' ' + (mail.from.email || '') + '\n' + (mail.bodyText || '') + '\n' + (mail.xlsxText || '');
       default: return '';
     }
@@ -1841,22 +2097,41 @@ body.with-detail .list .snip { display: none; }
         rule('r-repair', 'c-repair', 'any', '補修, 修理, 修繕, 修復, 復旧, 故障, 不具合, 破損, 損傷, 異常, 不良, 点検, 交換, 取替, 取り替え, 漏れ, 漏洩, 調整, 直して, メンテ, 工事, 対応依頼, 依頼')
       ]
     };
-    var subDefs = [
-      ['s-dispenser', '計量機', '#d9480f', '計量機, 給油機, ノズル, 給油ホース, 表示器, 給油ポンプ'],
-      ['s-carwash', '洗車機', '#1971c2', '洗車機, 洗車'],
-      ['s-sign', '看板・照明', '#e67700', '看板, サイン, 照明, キャノピー, led照明, led灯, 蛍光灯, ポール'],
-      ['s-elec', 'POS・電気', '#7048e8', 'pos端末, posレジ, レジ, 分電盤, ブレーカー, 配線, 電気, 漏電'],
-      ['s-tank', 'タンク・配管', '#0c8599', 'タンク, 液面計, 配管, 漏洩, 油水分離, 地下'],
-      ['s-air', '空調・コンプレッサー', '#2f9e44', 'エアコン, 空調, コンプレッサー, エアー'],
-      ['s-building', '建物・舗装', '#5c940d', '防火壁, 舗装, 屋根, 外壁, トイレ, 排水, 建物, 事務所, シャッター'],
-      ['s-other', 'その他設備', '#8a8f98', '']
+    return { version: 3, axes: { main: main, sub: subDefaults() }, ssLabels: SS_LABELS.slice() };
+  }
+
+  /**
+   * 副カテゴリ＝補修依頼書の「依頼内容」のチェック項目。
+   * まずチェックで決め、チェックが無ければ件名・本文・補修内容・状況内容の語で推定する。
+   * 語のルールは、広い語（「壁」など）を持つものほど後ろに置く
+   */
+  function subDefaults() {
+    var defs = [
+      ['s-bldg', '建物関係', '#2f9e44'],
+      ['s-civil', '外構関係', '#5c940d'],
+      ['s-machine', '機器関係', '#f76707'],
+      ['s-gauge', '油面計', '#0ca678'],
+      ['s-service', 'サービス機器', '#d9480f'],
+      ['s-self', 'セルフ機器', '#7048e8'],
+      ['s-elec', '電気関係', '#1971c2'],
+      ['s-other', 'その他', '#8a8f98']
+    ];
+    var words = [
+      ['s-gauge', '油面計, 液面計, 地下タンク, 廃油タンク, マンホール, 漏洩検知, 注油口, ベーパー, リカバリーホース, 通気管, 油水分離'],
+      ['s-service', '計量機, 計量器, 給油機, ノズル, 給油ホース, スイベル, vベルト, レシート印字, 吐出'],
+      ['s-machine', '洗車機, リフト, コンプレッサー, コンプレサー, エアタワー, タイヤチェンジャー, ウォールタンク'],
+      ['s-self', '精算機, 釣銭機, pos, レジ, インターホン, 監視カメラ, 放送, マイク'],
+      ['s-elec', '照明, led, 投光器, 構内灯, キャノピー灯, 不灯, 玉切れ, 電球, 蛍光灯, 漏電, ブレーカー, 分電盤, コンセント, 配線, 電気'],
+      ['s-civil', '土間, クラック, ひび割れ, グレーチング, 側溝, ドレイン, 防火塀, 防火壁, バリカー, 車止め, 車輪止め, 犬走り, フェンス, アンカー, 舗装, 段差, フォアコート, フォーコート, 看板, サインポール'],
+      ['s-bldg', 'シャッター, 自動ドア, 防火戸, 雨漏, ガラス, 換気扇, 空調, エアコン, ダクト, トイレ, シンク, シャワー, 水漏れ, 排水, 屋根, 天井, 事務所, 建物, 壁']
     ];
     var sub = { categories: [], rules: [] };
-    subDefs.forEach(function (d) {
+    defs.forEach(function (d) {
       sub.categories.push({ id: d[0], name: d[1], color: d[2], exclude: false });
-      if (d[3]) sub.rules.push(rule('r' + d[0], d[0], 'any', d[3]));
+      sub.rules.push({ id: 'rc' + d[0], categoryId: d[0], enabled: true, conditions: [{ field: 'formChecked', op: 'contains', value: d[1] }] });
     });
-    return { version: 2, axes: { main: main, sub: sub }, ssLabels: SS_LABELS.slice() };
+    words.forEach(function (w) { sub.rules.push(rule('rw' + w[0], w[0], 'content', w[1])); });
+    return sub;
   }
 
   /**
@@ -1867,11 +2142,13 @@ body.with-detail .list .snip { display: none; }
     var d = defaults();
     var migrated = false;
     var out;
+    var resetSub = false; // v3 で副カテゴリを依頼内容のチェック項目に置き換えた
     if (settings && settings.axes && settings.axes.main) {
       out = settings;
-      if (!out.axes.sub) out.axes.sub = d.axes.sub;
+      if (!out.axes.sub || !(out.version >= 3)) { out.axes.sub = d.axes.sub; resetSub = true; }
       if (!Array.isArray(out.ssLabels)) out.ssLabels = d.ssLabels;
-      out.version = 2;
+      if (out.version !== 3) migrated = true;
+      out.version = 3;
     } else if (settings && Array.isArray(settings.categories)) {
       migrated = true;
       var cats = settings.categories.map(function (c) {
@@ -1897,7 +2174,7 @@ body.with-detail .list .snip { display: none; }
         cats.splice(after < 0 ? cats.length : after + 1, 0, dc);
         rules.splice(at, 0, dr);
       });
-      out = { version: 2, axes: { main: { categories: cats, rules: rules }, sub: d.axes.sub }, ssLabels: d.ssLabels };
+      out = { version: 3, axes: { main: { categories: cats, rules: rules }, sub: d.axes.sub }, ssLabels: d.ssLabels };
     } else {
       out = d;
     }
@@ -1906,7 +2183,14 @@ body.with-detail .list .snip { display: none; }
       for (var k in manual) {
         var v = manual[k];
         if (typeof v === 'string') { m2[k] = { main: v }; migrated = true; }
-        else if (v && typeof v === 'object') m2[k] = v;
+        else if (v && typeof v === 'object') {
+          if (resetSub && v.sub) {
+            v = Object.assign({}, v);
+            delete v.sub; // 旧い副カテゴリの手直しは、新しい副カテゴリでは意味が無い
+            migrated = true;
+          }
+          if (Object.keys(v).length) m2[k] = v;
+        }
       }
     }
     return { settings: out, manual: m2, migrated: migrated };
@@ -1985,7 +2269,98 @@ body.with-detail .list .snip { display: none; }
     return { name: '', by: null };
   }
 
-  var api = { extractSs: extractSs, normalizeSs: normalizeSs };
+  // ---------- 補修依頼書 ----------
+  var BURDENS = ['ENEOS', '運営店', '調査次第'];
+  var DETAIL_LABELS = { repair: '補修内容', status: '状況内容' };
+
+  /** 見出しの比較用: 括弧・記号・空白を落とす */
+  function headKey(s) { return labelKey(s).replace(/[【】\[\]()（）「」『』<>＜＞※*・]/g, ''); }
+  function isHead(s, target) { var k = headKey(s); return k === target || (k.indexOf(target) === 0 && k.length <= target.length + 2); }
+  function anyHead(s) {
+    for (var k in DETAIL_LABELS) if (isHead(s, DETAIL_LABELS[k])) return true;
+    return isHead(s, '依頼内容') || isHead(s, '負担区分');
+  }
+
+  /** 見出しの右隣、無ければ下の行（3 行まで）の値 */
+  function valueNear(rows, r, c) {
+    var row = rows[r];
+    for (var n = c + 1; n < row.length; n++) {
+      var v = (row[n] || '').trim();
+      if (!v) continue;
+      if (anyHead(v)) break;
+      return v;
+    }
+    for (var d = 1; d <= 3 && r + d < rows.length; d++) {
+      var below = rows[r + d] || [];
+      var vs = [];
+      for (var x = c; x < below.length; x++) { var t = (below[x] || '').trim(); if (t) vs.push(t); }
+      if (vs.length && anyHead(vs[0])) break;
+      if (vs.length) return vs.join(' ');
+    }
+    return '';
+  }
+
+  function findDetail(rows, target) {
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r] || [];
+      for (var c = 0; c < row.length; c++) if (row[c] && isHead(row[c], target)) return valueNear(rows, r, c);
+    }
+    return '';
+  }
+
+  function burdenOf(label) {
+    var k = labelKey(label);
+    for (var i = 0; i < BURDENS.length; i++) if (k.indexOf(labelKey(BURDENS[i])) >= 0) return BURDENS[i];
+    return '';
+  }
+
+  // 取り出す値の上限（細工した xlsx で巨大な文字列を抱え込まないため）
+  var MAX_LABEL = 100, MAX_DETAIL = 2000, MAX_CHECKED = 50;
+
+  function sheetName(s) { var n = s.name || ''; return n.normalize ? n.normalize('NFKC') : n; }
+  function isFormSheet(s) { return /補修依頼/.test(sheetName(s)); }
+  // 記入例・見本のシートは、チェック済みの見本があるので読まない
+  function isSampleSheet(s) { return /記入例|見本|サンプル|^例|[(（]例[)）]/.test(sheetName(s)); }
+
+  /** シート 1 枚から補修依頼書の欄を取り出す */
+  function formOfSheet(s) {
+    var out = { checked: [], repair: '', status: '', burden: '' };
+    (s.checks || []).forEach(function (ch) {
+      if (!ch.checked || !ch.label) return;
+      // 「建物 関係」「建物関係　」の揺れをそろえる（正規表現のルールは正規化せずに比べるため）
+      var label = (ch.label.normalize ? ch.label.normalize('NFKC') : ch.label).replace(/[\s　]+/g, '').slice(0, MAX_LABEL);
+      var b = burdenOf(label);
+      if (b) { if (!out.burden) out.burden = b; }
+      else if (label && out.checked.length < MAX_CHECKED && out.checked.indexOf(label) < 0) out.checked.push(label);
+    });
+    for (var k in DETAIL_LABELS) out[k] = findDetail(s.rows || [], DETAIL_LABELS[k]).slice(0, MAX_DETAIL);
+    return out;
+  }
+  function isEmpty(f) { return !f.checked.length && !f.repair && !f.status && !f.burden; }
+
+  /** 名前に「補修依頼」を含む（記入例・非表示でない）シートがあるか。添付が複数あるとき、どれを使うか決めるため */
+  function hasFormSheet(sheets) {
+    return (sheets || []).some(function (s) { return !s.hidden && !isSampleSheet(s) && isFormSheet(s); });
+  }
+
+  /**
+   * xlsx の読み取り結果から補修依頼書の欄を取り出す。シートは 1 枚だけ使い、複数のシートを混ぜない。
+   * 非表示・記入例のシートは外し、「補修依頼」を名前に含むシートを優先する。無ければ残りのシートを順に見る
+   * @param {{name:string, rows:string[][], checks?:object[], hidden?:boolean}[]} sheets
+   * @returns {{checked:string[], repair:string, status:string, burden:string}|null} 中身が何も無ければ null
+   */
+  function extractForm(sheets) {
+    var list = (sheets || []).filter(function (s) { return !s.hidden && !isSampleSheet(s); });
+    var named = list.filter(isFormSheet);
+    var order = named.concat(list.filter(function (s) { return !isFormSheet(s); }));
+    for (var i = 0; i < order.length; i++) {
+      var f = formOfSheet(order[i]);
+      if (!isEmpty(f)) return f;
+    }
+    return null;
+  }
+
+  var api = { extractSs: extractSs, normalizeSs: normalizeSs, extractForm: extractForm, hasFormSheet: hasFormSheet, BURDENS: BURDENS };
   g.MsgFields = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -2001,6 +2376,7 @@ body.with-detail .list .snip { display: none; }
 
   var NONE = '__none__';
   var NO_SS = '（SS 不明）';
+  var NO_BURDEN = '（負担区分なし）';
 
   function idOf(m, axis) { return (m.cls && m.cls[axis] && m.cls[axis].categoryId) || NONE; }
 
@@ -2102,6 +2478,32 @@ body.with-detail .list .snip { display: none; }
       if ((a.ss === NO_SS) !== (b.ss === NO_SS)) return a.ss === NO_SS ? 1 : -1; // 不明は最後
       return b.total - a.total || (a.ss < b.ss ? -1 : 1);
     });
+    var max = list.reduce(function (a, r) { return Math.max(a, r.total); }, 0);
+    return { cols: cols, rows: list, max: max, total: rows.length };
+  }
+
+  /**
+   * 負担区分別（行＝order の順、無いものは NO_BURDEN で最後。件数 0 の行は出さない。列＝主カテゴリ）
+   * @param {function} nameOf メール → 負担区分（無ければ ''）
+   * @param {string[]} order 負担区分の並び（ENEOS・運営店・調査次第）
+   */
+  function byBurden(rows, mainCats, nameOf, order) {
+    var cols = axisKeys(rows, mainCats, 'main');
+    var known = {};
+    cols.forEach(function (k) { known[k] = 1; });
+    var map = {};
+    rows.forEach(function (m) {
+      var s = nameOf(m) || NO_BURDEN;
+      var c = idOf(m, 'main');
+      if (!known[c]) c = NONE;
+      if (!map[s]) { map[s] = { total: 0 }; cols.forEach(function (k) { map[s][k] = 0; }); }
+      map[s][c]++;
+      map[s].total++;
+    });
+    var keys = (order || []).filter(function (k) { return map[k]; });
+    Object.keys(map).forEach(function (k) { if (keys.indexOf(k) < 0 && k !== NO_BURDEN) keys.push(k); });
+    if (map[NO_BURDEN]) keys.push(NO_BURDEN);
+    var list = keys.map(function (k) { return { name: k, counts: map[k], total: map[k].total }; });
     var max = list.reduce(function (a, r) { return Math.max(a, r.total); }, 0);
     return { cols: cols, rows: list, max: max, total: rows.length };
   }
@@ -2256,7 +2658,7 @@ body.with-detail .list .snip { display: none; }
   }
 
   var api = {
-    NONE: NONE, NO_SS: NO_SS, matrix: matrix, monthly: monthly, bySs: bySs, tableToCsv: tableToCsv, monthOf: monthOf,
+    NONE: NONE, NO_SS: NO_SS, NO_BURDEN: NO_BURDEN, matrix: matrix, monthly: monthly, bySs: bySs, byBurden: byBurden, tableToCsv: tableToCsv, monthOf: monthOf,
     shares: shares, matrixShares: matrixShares, largestRemainder: largestRemainder, allocate: allocate,
     stratumKeyOf: stratumKeyOf, sample: sample
   };
@@ -2699,6 +3101,7 @@ body.with-detail .list .snip { display: none; }
    *   alloc: { title, note, result }（result は allocTable に渡す形）|| null,
    *   monthly: { series: [{ label, color }], bars: [{ label, values }], cols: [名前], rows: [{ name, counts, total }] },
    *   ss: { cols, rows }
+   *   burden: { cols, rows }  ss と同じ形
    * }
    * opt.mails: { css, body } を渡すと、メール一覧を後ろに付ける
    */
@@ -2729,6 +3132,7 @@ body.with-detail .list .snip { display: none; }
         '<div class="wrap">' + countTable('月', d.monthly.cols, d.monthly.rows) + '</div>'));
     }
     if (d.ss) h.push(sec('SS 別（主カテゴリ別）', '', '<div class="wrap">' + countTable('SS', d.ss.cols, d.ss.rows) + '</div>'));
+    if (d.burden) h.push(sec('負担区分別（主カテゴリ別）', '', '<div class="wrap">' + countTable('負担区分', d.burden.cols, d.burden.rows) + '</div>'));
     h.push('</main>');
     if (opt.mails) h.push('<main class="mails">' + opt.mails.body + '</main>');
     h.push('</body></html>');
@@ -2963,6 +3367,8 @@ body.with-detail .list .snip { display: none; }
     ['副カテゴリ', function (m, info) { return info.sub(m); }],
     ['SS名', function (m, info) { return info.ss(m); }],
     ['分類方法', function (m, info) { return info.by(m); }],
+    ['依頼内容チェック', function (m, info) { return info.checked ? info.checked(m) : ''; }],
+    ['負担区分', function (m, info) { return info.burden ? info.burden(m) : ''; }],
     ['送信日時', function (m) { return fmtDate(m.sentAt); }],
     ['受信日時', function (m) { return fmtDate(m.receivedAt); }],
     ['送信者名', function (m) { return m.from ? m.from.name : ''; }],
@@ -2984,7 +3390,7 @@ body.with-detail .list .snip { display: none; }
   ];
 
   /**
-   * info: { main(m), sub(m), ss(m), by(m) } それぞれ表示用の文字列を返す
+   * info: { main(m), sub(m), ss(m), by(m), checked?(m), burden?(m) } それぞれ表示用の文字列を返す
    */
   function toCsv(rows, info) {
     var cols = (info.extra || []).concat(COLS); // info.extra: [[見出し, fn(m)]] を先頭に足す（評価データの層・zip 内のパスなど）
@@ -3007,6 +3413,7 @@ body.with-detail .list .snip { display: none; }
           messageId: m.messageId, inReplyTo: m.inReplyTo, references: m.references,
           bodyText: m.bodyText,
           xlsxText: m.xlsxText || '',
+          repairForm: m.form || null, // 補修依頼書の欄 { checked, repair, status, burden }
           attachments: (m.attachments || []).map(function (a) {
             return { name: a.name, size: a.size, mime: a.mime, kind: a.kind, inline: !!a.hidden };
           })
@@ -3176,7 +3583,7 @@ body.with-detail .list .snip { display: none; }
     settings: Cls.defaults(), // { axes: { main, sub }, ssLabels }
     manual: {},               // key -> { main?, sub?, ss? }
     pairs: [],                // 依頼メールと最初の返信の組（読み込むたびに作り直す。保存しない）
-    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' },
+    filter: { cat: 'all', sub: '', ss: '', burden: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' },
     mode: 'list',             // 'list' | 'summary'
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
@@ -3311,21 +3718,32 @@ body.with-detail .list .snip { display: none; }
     };
   }
 
-  /** 添付（転送メールの中も含む）の xlsx をテキストにする */
-  async function xlsxTextOf(m) {
+  /**
+   * 添付（転送メールの中も含む）の xlsx をテキストにし、最初に見つかった補修依頼書の欄を取り出す
+   * @returns {Promise<{text: string, form: object|null}>}
+   */
+  async function xlsxOf(m) {
     const parts = [];
+    let form = null, formNamed = false; // 「補修依頼」の名前のシートを持つ xlsx を、ほかの xlsx より優先する
     async function walk(msg, depth) {
       for (const a of msg.attachments) {
         if (a.message && depth < 4) await walk(a.message, depth + 1);
         else if (a.data && Xlsx.isXlsx(a)) {
-          try { const r = await Xlsx.read(a.data); parts.push('《' + a.name + '》\n' + r.text); }
-          catch (e) { parts.push('《' + a.name + '》（読み取れませんでした: ' + e.message + '）'); }
+          try {
+            const r = await Xlsx.read(a.data);
+            parts.push('《' + a.name + '》\n' + r.text);
+            if (!formNamed) {
+              const f = Fields.extractForm(r.sheets);
+              const named = Fields.hasFormSheet(r.sheets);
+              if (f && (named || !form)) { form = f; formNamed = named; }
+            }
+          } catch (e) { parts.push('《' + a.name + '》（読み取れませんでした: ' + e.message + '）'); }
         }
       }
     }
     await walk(m, 0);
     const t = parts.join('\n');
-    return t.length > MAX_XLSX_TEXT ? t.slice(0, MAX_XLSX_TEXT) + '…' : t;
+    return { text: t.length > MAX_XLSX_TEXT ? t.slice(0, MAX_XLSX_TEXT) + '…' : t, form };
   }
 
   async function parseFile(file, path, id) {
@@ -3335,7 +3753,9 @@ body.with-detail .list .snip { display: none; }
       bytes = new Uint8Array(await file.arrayBuffer());
       const m = Msg.parse(bytes);
       Object.assign(rec, summarize(m));
-      rec.xlsxText = await xlsxTextOf(m);
+      const x = await xlsxOf(m);
+      rec.xlsxText = x.text;
+      rec.form = x.form;
       rec.key = m.messageId ? 'id:' + m.messageId.trim() : 'h:' + hashBytes(bytes);
     } catch (e) {
       rec.error = e && e.message ? e.message : String(e);
@@ -3517,7 +3937,11 @@ body.with-detail .list .snip { display: none; }
     };
     return [one('main', '主'), one('sub', '副')].filter(Boolean).join(' / ');
   }
-  const EXPORT_INFO = { main: (m) => catName(m, 'main'), sub: (m) => catName(m, 'sub'), ss: (m) => (m.ss && m.ss.name) || '', by: byName };
+  const burdenOf = (m) => (m.form && m.form.burden) || '';
+  const EXPORT_INFO = {
+    main: (m) => catName(m, 'main'), sub: (m) => catName(m, 'sub'), ss: (m) => (m.ss && m.ss.name) || '', by: byName,
+    checked: (m) => (m.form ? m.form.checked.join('・') : ''), burden: burdenOf
+  };
 
   // ---------- 絞り込み・並べ替え ----------
 
@@ -3546,7 +3970,9 @@ body.with-detail .list .snip { display: none; }
       else if (f.cat !== 'all' && m.cls.main.categoryId !== f.cat) return false;
       if (f.sub === NONE) { if (m.cls.sub.categoryId || m.error) return false; }
       else if (f.sub && m.cls.sub.categoryId !== f.sub) return false;
-      if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss) return false; }
+      // 「不明」「なし」には読めなかったファイルを入れない（集計は読めたメールだけを数えるので、件数を合わせる）
+      if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss || (f.ss === Sum.NO_SS && m.error)) return false; }
+      if (f.burden) { if ((burdenOf(m) || Sum.NO_BURDEN) !== f.burden || (f.burden === Sum.NO_BURDEN && m.error)) return false; }
       if (f.hideExcl && isExcluded(m)) return false;
       if (f.dup === 'only' && !m.dup) return false;
       if (f.thread && !threadMatch(m, f.thread)) return false;
@@ -3638,6 +4064,14 @@ body.with-detail .list .snip { display: none; }
     ssSel.appendChild(el('option', { value: '' }, 'SS: すべて'));
     if (keepSs && !counts.has(keepSs)) names.unshift(keepSs);
     for (const n of names) ssSel.appendChild(el('option', { value: n, selected: n === keepSs }, `${n}（${counts.get(n) || 0}）`));
+
+    const bSel = $('burdenQ');
+    const keepB = state.filter.burden;
+    const bCount = new Map();
+    for (const m of state.mails) { const n = burdenOf(m) || Sum.NO_BURDEN; bCount.set(n, (bCount.get(n) || 0) + 1); }
+    clear(bSel);
+    bSel.appendChild(el('option', { value: '' }, '負担区分: すべて'));
+    for (const n of Fields.BURDENS.concat(Sum.NO_BURDEN)) bSel.appendChild(el('option', { value: n, selected: n === keepB }, `${n}（${bCount.get(n) || 0}）`));
   }
 
   function catChip(c, by, small) {
@@ -3697,7 +4131,8 @@ body.with-detail .list .snip { display: none; }
         el('td', { class: 'cat' }, el('div', { class: 'catstack' }, [
           catChip(catById(m.cls.main.categoryId, 'main'), m.cls.main.by),
           catChip(catById(m.cls.sub.categoryId, 'sub'), m.cls.sub.by, true),
-          m.ss && m.ss.name ? el('span', { class: 'ss', text: m.ss.name, title: 'SS 名' + (m.ss.by === 'manual' ? '（手で入力）' : '') }) : null
+          m.ss && m.ss.name ? el('span', { class: 'ss', text: m.ss.name, title: 'SS 名' + (m.ss.by === 'manual' ? '（手で入力）' : '') }) : null,
+          burdenOf(m) ? el('span', { class: 'ss burden', text: '負担: ' + burdenOf(m), title: '補修依頼書の負担区分' }) : null
         ])),
         el('td', { class: 'date', text: fmtDateShort(mailDate(m)) }),
         el('td', { class: 'from', title: m.from.email || '' }, m.from.name || m.from.email || '（不明）'),
@@ -3969,6 +4404,14 @@ body.with-detail .list .snip { display: none; }
     const ssWhy = !m.ss || !m.ss.name ? '取り出せませんでした（上の欄に入力できます）'
       : m.ss.by === 'manual' ? '手で入力した名前です' : m.ss.by === 'xlsx' ? '添付 xlsx の見出しの隣から取りました' : '件名・本文から取りました';
     box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: 'SS' }), el('b', { text: (m.ss && m.ss.name) || '—' }), ' ', ssWhy]));
+    if (m.form) {
+      const f = m.form;
+      const dl = el('dl', { class: 'form-fields' });
+      for (const [k, v] of [['依頼内容', f.checked.join('・') || '（チェックなし）'], ['補修内容', f.repair || '—'], ['状況内容', f.status || '—'], ['負担区分', f.burden || '（チェックなし）']]) {
+        dl.append(el('dt', { text: k }), el('dd', { text: v }));
+      }
+      box.appendChild(el('div', { class: 'form-box' }, [el('h3', { text: '補修依頼書（添付 xlsx から）' }), dl]));
+    }
     box.appendChild(el('p', { class: 'file', text: '元ファイル: ' + (m.path || m.fileName) + '（' + fmtSize(m.size) + '）' }));
     const thread = threadLinks(m);
     if (thread) box.appendChild(thread);
@@ -4270,7 +4713,7 @@ body.with-detail .list .snip { display: none; }
     const subCats = axis('sub').categories;
     const mx = Sum.matrix(rows, mainCats, subCats);
     const d = { rows, mainCats, subCats, mx, shMain: Sum.shares(rows, mainCats, 'main'), shSub: Sum.shares(rows, subCats, 'sub'),
-      mo: Sum.monthly(rows, mainCats), ss: Sum.bySs(rows, mainCats) };
+      mo: Sum.monthly(rows, mainCats), ss: Sum.bySs(rows, mainCats), burden: Sum.byBurden(rows, mainCats, burdenOf, Fields.BURDENS) };
     d.al = allocCompute(d);
     return d;
   }
@@ -4298,6 +4741,7 @@ body.with-detail .list .snip { display: none; }
     else if (f.cat !== 'all' && f.cat !== 'error') out.push('主カテゴリ: ' + keyName(f.cat, 'main'));
     if (f.sub) out.push('副カテゴリ: ' + keyName(f.sub, 'sub'));
     if (f.ss) out.push('SS: ' + f.ss);
+    if (f.burden) out.push('負担区分: ' + f.burden);
     if (f.q) out.push('検索語: ' + f.q);
     if (f.from) out.push('送信者: ' + f.from);
     if (f.dateFrom || f.dateTo) out.push('期間: ' + (f.dateFrom || '（指定なし）') + ' 〜 ' + (f.dateTo || '（指定なし）'));
@@ -4350,7 +4794,8 @@ body.with-detail .list .snip { display: none; }
       alloc: { title: '評価データの配分試算', note: `${targetLabel(d)}。${allocTitle()}。${ALLOC_HELP[state.alloc.method]}${ALLOC_ROUND}`, result: d.al },
       monthly: { series: mc.series, bars: mc.bars, note: mc.note, cols: d.mo.cols.map((c) => keyName(c, 'main')),
         rows: d.mo.rows.map((r) => ({ name: monthLabel(r.month), counts: d.mo.cols.map((c) => r.counts[c]), total: r.total })) },
-      ss: { cols: d.ss.cols.map((c) => keyName(c, 'main')), rows: d.ss.rows.map((r) => ({ name: r.ss, counts: d.ss.cols.map((c) => r.counts[c]), total: r.total })) }
+      ss: { cols: d.ss.cols.map((c) => keyName(c, 'main')), rows: d.ss.rows.map((r) => ({ name: r.ss, counts: d.ss.cols.map((c) => r.counts[c]), total: r.total })) },
+      burden: { cols: d.burden.cols.map((c) => keyName(c, 'main')), rows: d.burden.rows.map((r) => ({ name: r.name, counts: d.burden.cols.map((c) => r.counts[c]), total: r.total })) }
     };
     const mails = withMails ? { css: Exp.LIST_CSS_SCOPED, body: Exp.listBody(d.rows, EXPORT_INFO, axis('main').categories.map((c) => c.name).concat('未分類')) } : null;
     return Rep.toHtml(data, { mails });
@@ -4548,7 +4993,7 @@ body.with-detail .list .snip { display: none; }
     box.appendChild(el('div', { class: 'sum-kpis' }, kpis(d).map((k) => el('div', { class: 'sum-kpi' }, [el('b', { text: k.value }), el('span', { text: k.label })]))));
 
     // 節への移動
-    const TOC = [['sum-main', '主の割合'], ['sum-sub', '副の割合'], ['sum-alloc', '配分試算'], ['sum-matrix', '主 × 副'], ['sum-month', '月別'], ['sum-ss', 'SS 別']];
+    const TOC = [['sum-main', '主の割合'], ['sum-sub', '副の割合'], ['sum-alloc', '配分試算'], ['sum-matrix', '主 × 副'], ['sum-month', '月別'], ['sum-ss', 'SS 別'], ['sum-burden', '負担区分別']];
     box.appendChild(el('nav', { class: 'sum-toc', 'aria-label': '集計の目次' }, TOC.map(([id, label]) =>
       el('button', { type: 'button', class: 'link', onclick: () => { const t = $(id); if (t) t.scrollIntoView({ block: 'start' }); } }, label))));
 
@@ -4656,6 +5101,25 @@ body.with-detail .list .snip { display: none; }
     const sec3 = section('SS 別', `SS 名は添付 xlsx の「SS名」欄、無ければ件名・本文から取っています。${noSs ? `取り出せなかった ${noSs.total} 件は「${Sum.NO_SS}」にまとめています（詳細画面で入力できます）。` : ''}`, t3, csvButton('CSV で書き出す', '集計_SS別', ssCsv));
     sec3.id = 'sum-ss';
     box.appendChild(sec3);
+
+    // 負担区分別
+    const bd = d.burden;
+    const t4 = el('table', { class: 'sum-table' });
+    t4.appendChild(el('thead', null, el('tr', null, [el('th', { text: '負担区分' }), ...bd.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
+    const tb4 = el('tbody');
+    for (const r of bd.rows) {
+      tb4.appendChild(el('tr', null, [
+        el('th', { class: 'rowh' }, el('button', { type: 'button', class: 'link' + (r.name === Sum.NO_BURDEN ? ' muted' : ''), onclick: () => drill({ burden: r.name }) }, r.name)),
+        ...bd.cols.map((c) => el('td', { class: 'num', text: r.counts[c] ? String(r.counts[c]) : '·' })),
+        el('td', { class: 'num tot', text: String(r.total) }),
+        el('td', { class: 'barc' }, bar(r.total, bd.max))
+      ]));
+    }
+    t4.appendChild(tb4);
+    const bdCsv = () => [['負担区分', ...bd.cols.map((c) => keyName(c, 'main')), '合計'], ...bd.rows.map((r) => [r.name, ...bd.cols.map((c) => r.counts[c]), r.total])];
+    const sec4 = section('負担区分別', `添付の補修依頼書で負担区分（${Fields.BURDENS.join(' / ')}）にチェックがあるものを数えています。補修依頼書が無い・チェックが無いものは「${Sum.NO_BURDEN}」です。`, t4, csvButton('CSV で書き出す', '集計_負担区分別', bdCsv));
+    sec4.id = 'sum-burden';
+    box.appendChild(sec4);
   }
 
   function section(title, note, table, action) {
@@ -4768,8 +5232,9 @@ body.with-detail .list .snip { display: none; }
       syncFilterInputs(); render();
     });
     $('ssQ').addEventListener('change', setFilter('ss'));
+    $('burdenQ').addEventListener('change', setFilter('burden'));
     $('resetFilter').addEventListener('click', () => {
-      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' };
+      state.filter = { cat: state.filter.cat, sub: '', ss: '', burden: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' };
       syncFilterInputs();
       state.page = 0; render();
     });
@@ -4856,7 +5321,10 @@ body.with-detail .list .snip { display: none; }
       try {
         const s = JSON.parse(await f.text());
         if (!(s && (s.axes || Array.isArray(s.categories)))) throw new Error('設定ファイルの形式が違います');
-        const r = Cls.migrate(s, s.manual || {});
+        // 手直しを含まない（または空の）ファイルなら、今の手直しを残す（黙って全部消さない）
+        const fileManual = s.manual && typeof s.manual === 'object' && Object.keys(s.manual).length ? s.manual : null;
+        delete s.manual; // 手直しは settings と別に保存する
+        const r = Cls.migrate(s, fileManual || state.manual);
         state.settings = r.settings; state.manual = r.manual;
         settingsChanged(true);
       } catch (e) {

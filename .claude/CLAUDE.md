@@ -35,16 +35,16 @@ css/style.css
 js/cfb.js         OLE 複合ファイル(CFB)の読み取り
 js/msg.js         MAPI プロパティ → メールオブジェクト
 js/rtf.js         圧縮 RTF(LZFu) 展開、RTF 内 HTML / テキスト取り出し
-js/xlsx.js        添付 xlsx の読み取り（表示・検索・分類用）
-js/classify.js    カテゴリ・ルール評価（主・副の 2 軸）、初期設定、v1→v2 の設定移行
-js/fields.js      SS 名の取り出し（xlsx の見出しの隣 → 件名・本文の「○○SS」）
+js/xlsx.js        添付 xlsx の読み取り（表示・検索・分類用）。フォームのチェックボックス（VML・ctrlProps）も読む
+js/classify.js    カテゴリ・ルール評価（主・副の 2 軸）、初期設定、v1→v2→v3 の設定移行
+js/fields.js      SS 名の取り出し（xlsx の見出しの隣 → 件名・本文の「○○SS」）、補修依頼書の欄（依頼内容チェック・補修内容・状況内容・負担区分）
 js/summary.js     集計（主×副・月別・SS 別）と集計表の CSV。画面に依存しない純粋関数
 js/thread.js      再送のまとまりと、依頼メール↔返信メールの紐づけ（In-Reply-To・References → 会話情報）。純粋関数
 js/store.js       IndexedDB（カテゴリ・ルール・手直しだけを保存。本文は保存しない）
 js/export.js      CSV / HTML / JSON 書き出し
 js/app.js         画面
 tests/            node:test。make-msg.mjs がテスト用 .msg を生成する
-.claude/specs/    仕様書（msg-extract/ が初版、two-axis-summary.md が 2 軸と集計の追加分）
+.claude/specs/    仕様書（msg-extract/ が初版、two-axis-summary.md が 2 軸と集計、repair-form.md が補修依頼書の読み取り）
 ```
 
 ## コマンド
@@ -54,6 +54,7 @@ node build.mjs                           # index.html を生成（css/js/src を
 npm test                                 # テスト（node --test "tests/*.test.mjs"）
 node tests/make-samples.mjs 1000         # 動作確認用の .msg を samples-gen/ に生成
 node tests/dump.mjs <ファイルかフォルダ>   # 実物 .msg の解析結果を表示（--body で本文も）
+node tests/dump-xlsx.mjs <.msg/.xlsx/フォルダ> # 添付 xlsx のチェックボックスと補修依頼書の欄を表示（--cells で見出し周りのセルも）
 node tests/compare-fixtures.mjs <資材>   # msgreader(OSS) のテスト資材と照合。資材はリポジトリ外に置く
 ```
 
@@ -61,7 +62,11 @@ node tests/compare-fixtures.mjs <資材>   # msgreader(OSS) のテスト資材�
 
 - 実物の .msg は機密のためリポジトリに置かない（`samples/` は .gitignore）
 - 文字列は Unicode 版（型 001F）を優先し、ANSI 版（001E）は PR_INTERNET_CPID / PR_MESSAGE_CODEPAGE で復号。無ければ Shift_JIS
-- 分類は 2 軸: 主＝業務の段階（依頼・見積・発注・完了・請求）、副＝設備・工種。1 通に各 1 つ。手直しは manual[key] = { main, sub, ss }
+- 分類は 2 軸。1 通に各 1 つ。手直しは manual[key] = { main, sub, ss }
+  - 主: 初期値は業務の段階。ただし利用者は手配先の区分（建物・外構・メーカー・油面計・電気セルフ・給排水・例外など）に作り変えて使っている。主の設定をプログラムで書き換えない
+  - 副: 補修依頼書の「依頼内容」のチェック項目 8 つ（建物関係・外構関係・機器関係・油面計・サービス機器・セルフ機器・電気関係・その他）。チェック優先、無ければ語で推定（設定 v3）
+- 補修依頼書のチェックはフォームのチェックボックス。xlsxText には選択肢の文字がチェックの有無に関係なく全部入るので、分類には formChecked / formDetail / content を使う
+- 負担区分（ENEOS / 運営店 / 調査次第）は補修依頼書のチェックから取る。手直しは無い
 - 手で付けたカテゴリはルールより優先する
 - 添付 PDF は FAX を PDF にしたもの（画像）で文字は取り出せない。OCR はしない
 - 集計から一覧へ移るときは、今の絞り込みを残して条件を足す（件数を集計と一致させる）

@@ -254,6 +254,7 @@
    *   alloc: { title, note, result }（result は allocTable に渡す形）|| null,
    *   monthly: { series: [{ label, color }], bars: [{ label, values }], cols: [名前], rows: [{ name, counts, total }] },
    *   ss: { cols, rows }
+   *   burden: { cols, rows }  ss と同じ形
    * }
    * opt.mails: { css, body } を渡すと、メール一覧を後ろに付ける
    */
@@ -284,6 +285,7 @@
         '<div class="wrap">' + countTable('月', d.monthly.cols, d.monthly.rows) + '</div>'));
     }
     if (d.ss) h.push(sec('SS 別（主カテゴリ別）', '', '<div class="wrap">' + countTable('SS', d.ss.cols, d.ss.rows) + '</div>'));
+    if (d.burden) h.push(sec('負担区分別（主カテゴリ別）', '', '<div class="wrap">' + countTable('負担区分', d.burden.cols, d.burden.rows) + '</div>'));
     h.push('</main>');
     if (opt.mails) h.push('<main class="mails">' + opt.mails.body + '</main>');
     h.push('</body></html>');

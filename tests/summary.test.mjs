@@ -142,3 +142,13 @@ test('sample: 件数は min(配分, 母数)・同じシードなら同じ・入�
   assert.notDeepEqual(r3.a.map((x) => x.key), r1.a.map((x) => x.key));
   assert.equal(groups.a[0].key, 'a000', '入力を書き換えない');
 });
+
+test('負担区分別: 決まった順、無いものは最後、件数 0 の行は出さない', () => {
+  const b = (main, burden) => ({ cls: { main: { categoryId: main }, sub: { categoryId: null } }, form: burden == null ? null : { burden } });
+  const list = [b('m1', '運営店'), b('m2', '運営店'), b('m1', 'ENEOS'), b('m1', null), b('m2', '')];
+  const r = S.byBurden(list, mainCats, (m) => (m.form && m.form.burden) || '', F.BURDENS);
+  assert.deepEqual(r.rows.map((x) => [x.name, x.total]), [['ENEOS', 1], ['運営店', 2], [S.NO_BURDEN, 2]]);
+  assert.equal(r.rows[1].counts.m2, 1);
+  assert.equal(r.max, 2);
+  assert.equal(r.total, 5);
+});

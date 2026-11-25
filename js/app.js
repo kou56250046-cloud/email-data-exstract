@@ -24,7 +24,7 @@
     settings: Cls.defaults(), // { axes: { main, sub }, ssLabels }
     manual: {},               // key -> { main?, sub?, ss? }
     pairs: [],                // 依頼メールと最初の返信の組（読み込むたびに作り直す。保存しない）
-    filter: { cat: 'all', sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' },
+    filter: { cat: 'all', sub: '', ss: '', burden: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' },
     mode: 'list',             // 'list' | 'summary'
     settingsTab: 'main',      // 'main' | 'sub' | 'ss'
     sumIncExcluded: false,
@@ -159,21 +159,32 @@
     };
   }
 
-  /** 添付（転送メールの中も含む）の xlsx をテキストにする */
-  async function xlsxTextOf(m) {
+  /**
+   * 添付（転送メールの中も含む）の xlsx をテキストにし、最初に見つかった補修依頼書の欄を取り出す
+   * @returns {Promise<{text: string, form: object|null}>}
+   */
+  async function xlsxOf(m) {
     const parts = [];
+    let form = null, formNamed = false; // 「補修依頼」の名前のシートを持つ xlsx を、ほかの xlsx より優先する
     async function walk(msg, depth) {
       for (const a of msg.attachments) {
         if (a.message && depth < 4) await walk(a.message, depth + 1);
         else if (a.data && Xlsx.isXlsx(a)) {
-          try { const r = await Xlsx.read(a.data); parts.push('《' + a.name + '》\n' + r.text); }
-          catch (e) { parts.push('《' + a.name + '》（読み取れませんでした: ' + e.message + '）'); }
+          try {
+            const r = await Xlsx.read(a.data);
+            parts.push('《' + a.name + '》\n' + r.text);
+            if (!formNamed) {
+              const f = Fields.extractForm(r.sheets);
+              const named = Fields.hasFormSheet(r.sheets);
+              if (f && (named || !form)) { form = f; formNamed = named; }
+            }
+          } catch (e) { parts.push('《' + a.name + '》（読み取れませんでした: ' + e.message + '）'); }
         }
       }
     }
     await walk(m, 0);
     const t = parts.join('\n');
-    return t.length > MAX_XLSX_TEXT ? t.slice(0, MAX_XLSX_TEXT) + '…' : t;
+    return { text: t.length > MAX_XLSX_TEXT ? t.slice(0, MAX_XLSX_TEXT) + '…' : t, form };
   }
 
   async function parseFile(file, path, id) {
@@ -183,7 +194,9 @@
       bytes = new Uint8Array(await file.arrayBuffer());
       const m = Msg.parse(bytes);
       Object.assign(rec, summarize(m));
-      rec.xlsxText = await xlsxTextOf(m);
+      const x = await xlsxOf(m);
+      rec.xlsxText = x.text;
+      rec.form = x.form;
       rec.key = m.messageId ? 'id:' + m.messageId.trim() : 'h:' + hashBytes(bytes);
     } catch (e) {
       rec.error = e && e.message ? e.message : String(e);
@@ -365,7 +378,11 @@
     };
     return [one('main', '主'), one('sub', '副')].filter(Boolean).join(' / ');
   }
-  const EXPORT_INFO = { main: (m) => catName(m, 'main'), sub: (m) => catName(m, 'sub'), ss: (m) => (m.ss && m.ss.name) || '', by: byName };
+  const burdenOf = (m) => (m.form && m.form.burden) || '';
+  const EXPORT_INFO = {
+    main: (m) => catName(m, 'main'), sub: (m) => catName(m, 'sub'), ss: (m) => (m.ss && m.ss.name) || '', by: byName,
+    checked: (m) => (m.form ? m.form.checked.join('・') : ''), burden: burdenOf
+  };
 
   // ---------- 絞り込み・並べ替え ----------
 
@@ -394,7 +411,9 @@
       else if (f.cat !== 'all' && m.cls.main.categoryId !== f.cat) return false;
       if (f.sub === NONE) { if (m.cls.sub.categoryId || m.error) return false; }
       else if (f.sub && m.cls.sub.categoryId !== f.sub) return false;
-      if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss) return false; }
+      // 「不明」「なし」には読めなかったファイルを入れない（集計は読めたメールだけを数えるので、件数を合わせる）
+      if (f.ss) { if (((m.ss && m.ss.name) || Sum.NO_SS) !== f.ss || (f.ss === Sum.NO_SS && m.error)) return false; }
+      if (f.burden) { if ((burdenOf(m) || Sum.NO_BURDEN) !== f.burden || (f.burden === Sum.NO_BURDEN && m.error)) return false; }
       if (f.hideExcl && isExcluded(m)) return false;
       if (f.dup === 'only' && !m.dup) return false;
       if (f.thread && !threadMatch(m, f.thread)) return false;
@@ -486,6 +505,14 @@
     ssSel.appendChild(el('option', { value: '' }, 'SS: すべて'));
     if (keepSs && !counts.has(keepSs)) names.unshift(keepSs);
     for (const n of names) ssSel.appendChild(el('option', { value: n, selected: n === keepSs }, `${n}（${counts.get(n) || 0}）`));
+
+    const bSel = $('burdenQ');
+    const keepB = state.filter.burden;
+    const bCount = new Map();
+    for (const m of state.mails) { const n = burdenOf(m) || Sum.NO_BURDEN; bCount.set(n, (bCount.get(n) || 0) + 1); }
+    clear(bSel);
+    bSel.appendChild(el('option', { value: '' }, '負担区分: すべて'));
+    for (const n of Fields.BURDENS.concat(Sum.NO_BURDEN)) bSel.appendChild(el('option', { value: n, selected: n === keepB }, `${n}（${bCount.get(n) || 0}）`));
   }
 
   function catChip(c, by, small) {
@@ -545,7 +572,8 @@
         el('td', { class: 'cat' }, el('div', { class: 'catstack' }, [
           catChip(catById(m.cls.main.categoryId, 'main'), m.cls.main.by),
           catChip(catById(m.cls.sub.categoryId, 'sub'), m.cls.sub.by, true),
-          m.ss && m.ss.name ? el('span', { class: 'ss', text: m.ss.name, title: 'SS 名' + (m.ss.by === 'manual' ? '（手で入力）' : '') }) : null
+          m.ss && m.ss.name ? el('span', { class: 'ss', text: m.ss.name, title: 'SS 名' + (m.ss.by === 'manual' ? '（手で入力）' : '') }) : null,
+          burdenOf(m) ? el('span', { class: 'ss burden', text: '負担: ' + burdenOf(m), title: '補修依頼書の負担区分' }) : null
         ])),
         el('td', { class: 'date', text: fmtDateShort(mailDate(m)) }),
         el('td', { class: 'from', title: m.from.email || '' }, m.from.name || m.from.email || '（不明）'),
@@ -817,6 +845,14 @@
     const ssWhy = !m.ss || !m.ss.name ? '取り出せませんでした（上の欄に入力できます）'
       : m.ss.by === 'manual' ? '手で入力した名前です' : m.ss.by === 'xlsx' ? '添付 xlsx の見出しの隣から取りました' : '件名・本文から取りました';
     box.appendChild(el('p', { class: 'why' }, [el('span', { class: 'ax', text: 'SS' }), el('b', { text: (m.ss && m.ss.name) || '—' }), ' ', ssWhy]));
+    if (m.form) {
+      const f = m.form;
+      const dl = el('dl', { class: 'form-fields' });
+      for (const [k, v] of [['依頼内容', f.checked.join('・') || '（チェックなし）'], ['補修内容', f.repair || '—'], ['状況内容', f.status || '—'], ['負担区分', f.burden || '（チェックなし）']]) {
+        dl.append(el('dt', { text: k }), el('dd', { text: v }));
+      }
+      box.appendChild(el('div', { class: 'form-box' }, [el('h3', { text: '補修依頼書（添付 xlsx から）' }), dl]));
+    }
     box.appendChild(el('p', { class: 'file', text: '元ファイル: ' + (m.path || m.fileName) + '（' + fmtSize(m.size) + '）' }));
     const thread = threadLinks(m);
     if (thread) box.appendChild(thread);
@@ -1118,7 +1154,7 @@
     const subCats = axis('sub').categories;
     const mx = Sum.matrix(rows, mainCats, subCats);
     const d = { rows, mainCats, subCats, mx, shMain: Sum.shares(rows, mainCats, 'main'), shSub: Sum.shares(rows, subCats, 'sub'),
-      mo: Sum.monthly(rows, mainCats), ss: Sum.bySs(rows, mainCats) };
+      mo: Sum.monthly(rows, mainCats), ss: Sum.bySs(rows, mainCats), burden: Sum.byBurden(rows, mainCats, burdenOf, Fields.BURDENS) };
     d.al = allocCompute(d);
     return d;
   }
@@ -1146,6 +1182,7 @@
     else if (f.cat !== 'all' && f.cat !== 'error') out.push('主カテゴリ: ' + keyName(f.cat, 'main'));
     if (f.sub) out.push('副カテゴリ: ' + keyName(f.sub, 'sub'));
     if (f.ss) out.push('SS: ' + f.ss);
+    if (f.burden) out.push('負担区分: ' + f.burden);
     if (f.q) out.push('検索語: ' + f.q);
     if (f.from) out.push('送信者: ' + f.from);
     if (f.dateFrom || f.dateTo) out.push('期間: ' + (f.dateFrom || '（指定なし）') + ' 〜 ' + (f.dateTo || '（指定なし）'));
@@ -1198,7 +1235,8 @@
       alloc: { title: '評価データの配分試算', note: `${targetLabel(d)}。${allocTitle()}。${ALLOC_HELP[state.alloc.method]}${ALLOC_ROUND}`, result: d.al },
       monthly: { series: mc.series, bars: mc.bars, note: mc.note, cols: d.mo.cols.map((c) => keyName(c, 'main')),
         rows: d.mo.rows.map((r) => ({ name: monthLabel(r.month), counts: d.mo.cols.map((c) => r.counts[c]), total: r.total })) },
-      ss: { cols: d.ss.cols.map((c) => keyName(c, 'main')), rows: d.ss.rows.map((r) => ({ name: r.ss, counts: d.ss.cols.map((c) => r.counts[c]), total: r.total })) }
+      ss: { cols: d.ss.cols.map((c) => keyName(c, 'main')), rows: d.ss.rows.map((r) => ({ name: r.ss, counts: d.ss.cols.map((c) => r.counts[c]), total: r.total })) },
+      burden: { cols: d.burden.cols.map((c) => keyName(c, 'main')), rows: d.burden.rows.map((r) => ({ name: r.name, counts: d.burden.cols.map((c) => r.counts[c]), total: r.total })) }
     };
     const mails = withMails ? { css: Exp.LIST_CSS_SCOPED, body: Exp.listBody(d.rows, EXPORT_INFO, axis('main').categories.map((c) => c.name).concat('未分類')) } : null;
     return Rep.toHtml(data, { mails });
@@ -1396,7 +1434,7 @@
     box.appendChild(el('div', { class: 'sum-kpis' }, kpis(d).map((k) => el('div', { class: 'sum-kpi' }, [el('b', { text: k.value }), el('span', { text: k.label })]))));
 
     // 節への移動
-    const TOC = [['sum-main', '主の割合'], ['sum-sub', '副の割合'], ['sum-alloc', '配分試算'], ['sum-matrix', '主 × 副'], ['sum-month', '月別'], ['sum-ss', 'SS 別']];
+    const TOC = [['sum-main', '主の割合'], ['sum-sub', '副の割合'], ['sum-alloc', '配分試算'], ['sum-matrix', '主 × 副'], ['sum-month', '月別'], ['sum-ss', 'SS 別'], ['sum-burden', '負担区分別']];
     box.appendChild(el('nav', { class: 'sum-toc', 'aria-label': '集計の目次' }, TOC.map(([id, label]) =>
       el('button', { type: 'button', class: 'link', onclick: () => { const t = $(id); if (t) t.scrollIntoView({ block: 'start' }); } }, label))));
 
@@ -1504,6 +1542,25 @@
     const sec3 = section('SS 別', `SS 名は添付 xlsx の「SS名」欄、無ければ件名・本文から取っています。${noSs ? `取り出せなかった ${noSs.total} 件は「${Sum.NO_SS}」にまとめています（詳細画面で入力できます）。` : ''}`, t3, csvButton('CSV で書き出す', '集計_SS別', ssCsv));
     sec3.id = 'sum-ss';
     box.appendChild(sec3);
+
+    // 負担区分別
+    const bd = d.burden;
+    const t4 = el('table', { class: 'sum-table' });
+    t4.appendChild(el('thead', null, el('tr', null, [el('th', { text: '負担区分' }), ...bd.cols.map((c) => el('th', { class: 'colh', text: keyName(c, 'main') })), el('th', { class: 'tot', text: '合計' }), el('th', { class: 'barh' })])));
+    const tb4 = el('tbody');
+    for (const r of bd.rows) {
+      tb4.appendChild(el('tr', null, [
+        el('th', { class: 'rowh' }, el('button', { type: 'button', class: 'link' + (r.name === Sum.NO_BURDEN ? ' muted' : ''), onclick: () => drill({ burden: r.name }) }, r.name)),
+        ...bd.cols.map((c) => el('td', { class: 'num', text: r.counts[c] ? String(r.counts[c]) : '·' })),
+        el('td', { class: 'num tot', text: String(r.total) }),
+        el('td', { class: 'barc' }, bar(r.total, bd.max))
+      ]));
+    }
+    t4.appendChild(tb4);
+    const bdCsv = () => [['負担区分', ...bd.cols.map((c) => keyName(c, 'main')), '合計'], ...bd.rows.map((r) => [r.name, ...bd.cols.map((c) => r.counts[c]), r.total])];
+    const sec4 = section('負担区分別', `添付の補修依頼書で負担区分（${Fields.BURDENS.join(' / ')}）にチェックがあるものを数えています。補修依頼書が無い・チェックが無いものは「${Sum.NO_BURDEN}」です。`, t4, csvButton('CSV で書き出す', '集計_負担区分別', bdCsv));
+    sec4.id = 'sum-burden';
+    box.appendChild(sec4);
   }
 
   function section(title, note, table, action) {
@@ -1616,8 +1673,9 @@
       syncFilterInputs(); render();
     });
     $('ssQ').addEventListener('change', setFilter('ss'));
+    $('burdenQ').addEventListener('change', setFilter('burden'));
     $('resetFilter').addEventListener('click', () => {
-      state.filter = { cat: state.filter.cat, sub: '', ss: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' };
+      state.filter = { cat: state.filter.cat, sub: '', ss: '', burden: '', q: '', from: '', dateFrom: '', dateTo: '', att: '', hideExcl: false, dup: '', thread: '' };
       syncFilterInputs();
       state.page = 0; render();
     });
@@ -1704,7 +1762,10 @@
       try {
         const s = JSON.parse(await f.text());
         if (!(s && (s.axes || Array.isArray(s.categories)))) throw new Error('設定ファイルの形式が違います');
-        const r = Cls.migrate(s, s.manual || {});
+        // 手直しを含まない（または空の）ファイルなら、今の手直しを残す（黙って全部消さない）
+        const fileManual = s.manual && typeof s.manual === 'object' && Object.keys(s.manual).length ? s.manual : null;
+        delete s.manual; // 手直しは settings と別に保存する
+        const r = Cls.migrate(s, fileManual || state.manual);
         state.settings = r.settings; state.manual = r.manual;
         settingsChanged(true);
       } catch (e) {
